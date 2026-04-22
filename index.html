@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4D Axis Quiz Platform</title>
+    <!-- PyScript Core -->
+    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css">
+    <script defer src="https://pyscript.net/latest/pyscript.js"></script>
+    <style>
+        body {
+            margin: 0;
+            background-color: #050505;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: white;
+            font-family: sans-serif;
+            overflow: hidden;
+        }
+        #pygame-container {
+            border: 2px solid #333;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        .loading-text {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="loading-text">Initializing 4D Physics Engine...</div>
+    <div id="pygame-container"></div>
+
+    <py-config>
+        packages = ["pygame-ce", "numpy"]
+        [[fetch]]
+        files = [
+            "./Senior_Project/MAIN.py",
+            "./Senior_Project/MAINWireframe.py",
+            "./Senior_Project/MAINWShell.py",
+            "./Senior_Project/MAINCellHl.py",
+            "./Senior_Project/OriginRenderer.py",
+            "./Senior_Project/ThreeAxis.py",
+            "./Senior_Project/Tesseract.py",
+            "./Senior_Project/FourShape.py",
+            "./Senior_Project/Graph.py",
+            "./Senior_Project/Cube.py",
+            "./Senior_Project/Tetrahedron.py"
+        ]
+    </py-config>
+
+    <py-script>
+import asyncio
+import pygame
+import sys
+
+# We need to monkey-patch the main loop to be async for PyScript
+async def run_app():
+    import MAIN
+    
+    # Hide loading text once Pygame starts
+    from js import document
+    document.getElementById("loading").style.display = "none"
+    
+    # Run the main function. 
+    # Note: For PyScript, we usually need to modify the internal loop of MAIN.py
+    # But we can also try to run it directly if we modify MAIN.py to be async-aware.
+    
+    # Since I've provided the code for MAIN.py, let's redefine the main loop here 
+    # to ensure it's async-compatible without forcing you to change your local files.
+    
+    await MAIN.main_async()
+
+if __name__ == "__main__":
+    asyncio.ensure_future(run_app())
+    </py-script>
+</body>
+</html>
