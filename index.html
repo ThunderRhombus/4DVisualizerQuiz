@@ -66,6 +66,11 @@
         <p style="margin: 5px 0; color: #888; font-size: 14px;">Physics-accurate 4D Tesseract Rotation Mapping</p>
     </div>
 
+    <!-- Error message display -->
+    <div id="error-message" style="display: none; position: fixed; top: 60px; left: 20px; background: #1a0000; border: 2px solid #ff4444; padding: 15px; border-radius: 5px; max-width: 400px; max-height: 200px; overflow-y: auto; font-size: 12px; z-index: 1000;">
+        <div style="color: #ffaa00; margin-bottom: 10px; font-weight: bold;">⚠️ Initialization Messages:</div>
+    </div>
+
     <!-- Pygame-CE will automatically target this canvas ID -->
     <canvas id="canvas"></canvas>
 
@@ -82,32 +87,84 @@
             "./FourShape.py",
             "./Graph.py",
             "./Cube.py",
-            "./Tetrahedron.py"
+            "./Tetrahedron.py",
+            "./Edge.py",
+            "./Origin.py",
+            "./patch.py"
         ]
     }'>
 import asyncio
 import pygame
 import MAIN
-from js import document
+from js import document, console
 import os
+import sys
+import traceback
+
+def log_error(msg):
+    """Log error to browser console and UI"""
+    console.error(f"[4D-ERROR] {msg}")
+    error_div = document.getElementById("error-message")
+    if error_div:
+        error_div.innerHTML += f"<div style='color: #ff4444;'>{msg}</div>"
+
+def log_info(msg):
+    """Log info to browser console"""
+    console.log(f"[4D-INFO] {msg}")
 
 async def run_game():
-    # Set environment for pygame-ce web support
-    os.environ['SDL_VIDEODRIVER'] = 'emscripten'
-    os.environ['SDL_VIDEO_WINDOW_POS'] = '0,0'
-    
-    # Set canvas size to match your app
-    canvas = document.getElementById("canvas")
-    canvas.width = 1200
-    canvas.height = 800
-    
-    # Signal to hide the loading overlay once assets are ready
-    document.getElementById("loading").style.opacity = "0"
-    await asyncio.sleep(0.5)
-    document.getElementById("loading").style.display = "none"
-    
-    # Run the main async loop from your MAIN.py
-    await MAIN.main_async()
+    try:
+        log_info("Starting 4D Visualizer initialization...")
+        
+        # Configure pygame-ce for web
+        try:
+            os.environ['SDL_VIDEODRIVER'] = 'emscripten'
+            os.environ['SDL_VIDEO_WINDOW_POS'] = '0,0'
+            log_info("SDL environment configured")
+        except Exception as e:
+            log_error(f"Failed to configure SDL environment: {e}")
+        
+        # Set canvas properties
+        try:
+            canvas = document.getElementById("canvas")
+            if not canvas:
+                raise Exception("Canvas element not found in DOM")
+            canvas.width = 1200
+            canvas.height = 800
+            log_info("Canvas initialized: 1200x800")
+        except Exception as e:
+            log_error(f"Canvas setup failed: {e}")
+            return
+        
+        # Hide loading overlay
+        try:
+            loading = document.getElementById("loading")
+            if loading:
+                loading.style.opacity = "0"
+                await asyncio.sleep(0.3)
+                loading.style.display = "none"
+            log_info("Loading overlay hidden")
+        except Exception as e:
+            log_error(f"Failed to hide loading overlay: {e}")
+        
+        # Show error message container
+        try:
+            error_div = document.getElementById("error-message")
+            if error_div:
+                error_div.style.display = "block"
+        except:
+            pass
+        
+        # Run main game
+        log_info("Launching main game loop...")
+        await MAIN.main_async()
+        
+    except KeyboardInterrupt:
+        log_info("Game interrupted by user")
+    except Exception as e:
+        error_msg = f"Critical Error: {str(e)}\n{traceback.format_exc()}"
+        log_error(error_msg)
+        print(error_msg, file=sys.stderr)
 
 if __name__ == "__main__":
     asyncio.ensure_future(run_game())
