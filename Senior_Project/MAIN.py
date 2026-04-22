@@ -1,0 +1,240 @@
+import pygame
+import numpy as np
+import random
+import asyncio
+from Tesseract import Tesseract
+from Cube import Cube
+from Tetrahedron import Tetrahedron
+from origin_viewer import spawn_origin_viewer
+from ThreeAxis import ThreeAxis
+
+# Import modular renderers
+from MAINWireframe import WireframeRenderer
+from MAINWShell import WShellRenderer
+from MAINCellHl import CellHlRenderer, ToggleButton
+from OriginRenderer import OriginRenderer
+
+async def main_async():
+    # Initialize pygame
+    pygame.init()
+
+    WIDTH, HEIGHT = 1200, 800
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("4D Axis Quiz Platform")
+    clock = pygame.time.Clock()
+    font = pygame.font.SysFont(None, 24)
+    big_font = pygame.font.SysFont(None, 36)
+
+    # Interaction State
+    yaw, pitch, roll = 0, 0, 0
+    a4_correct = (0.1, 0.05, 0.02)
+    
+    # Angles for each of the 6 viewports (Main + 5 Origins)
+    dips = [0.0] * 6
+    tucks = [0.0] * 6
+    skews = [0.0] * 6
+    
+    # a4 variants for the 5 options
+    correct_idx = random.randint(1, 5)
+    a4_variants = [None] * 6
+    a4_variants[0] = a4_correct # Main window
+    
+    for i in range(1, 6):
+        if i == correct_idx:
+            a4_variants[i] = a4_correct
+        else:
+            vals = list(a4_correct)
+            perturbation_type = random.choice(['shuffle', 'negate', 'scale'])
+            if perturbation_type == 'shuffle':
+                random.shuffle(vals)
+                if tuple(vals) == a4_correct: vals[0], vals[1] = vals[1], vals[0]
+            elif perturbation_type == 'negate':
+                idx = random.randint(0, 2)
+                vals[idx] *= -1
+            elif perturbation_type == 'scale':
+                idx = random.randint(0, 2)
+                vals[idx] *= random.choice([0.2, 3.0])
+            a4_variants[i] = tuple(vals)
+
+    mousex, mousey = WIDTH // 2, HEIGHT // 2
+    lastx, lasty = mousex, mousey
+    drag_start_pos = (0, 0)
+    dragging = False
+    xsens, ysens = WIDTH/180, HEIGHT/180
+    dy, dr = 0, 0
+    curr_vx, curr_vy = 0, 0
+    d4 = 0
+    paused = False
+    togglescroll = True
+    
+    # Initialize renderers
+    renderers = {
+        'Wireframe': WireframeRenderer(WIDTH, HEIGHT - 250, a4=a4_correct),
+        'W-Shells': WShellRenderer(WIDTH, HEIGHT - 250, a4=a4_correct),
+        'CellHl': CellHlRenderer(WIDTH, HEIGHT - 250, a4=a4_correct)
+    }
+    mode = 'Wireframe'
+    origin_renderer = OriginRenderer(200, 200, size=50)
+
+    # Initialize shapes
+    size = 100
+    ortho = 0.001
+    main_shapes = [
+        Tesseract(size, ortho, 0, 0, 0, 0),
+        ThreeAxis(75, ortho, 0, 0, 0)
+    ]
+
+    # Renderer specific settings
+    target_w = 0.0
+    opacity = 1.0
+    
+    # UI Elements
+    mode_buttons = [
+        ToggleButton(20, 20, 100, 30, "Wireframe", (100, 100, 255)),
+        ToggleButton(130, 20, 100, 30, "W-Shells", (100, 255, 100)),
+        ToggleButton(240, 20, 100, 30, "CellHl", (255, 100, 100))
+    ]
+    mode_buttons[0].selected = True
+
+    # Quiz selection buttons
+    quiz_buttons = []
+    for i in range(5):
+        quiz_buttons.append(ToggleButton(100 + i*210, HEIGHT - 40, 200, 30, f"Option {i+1}", (150, 150, 150)))
+
+    feedback_text = ""
+    feedback_color = (255, 255, 255)
+    mouse_history = [(0, 0)] * 5
+
+    running = True
+    while running:
+        mouse_history.append(pygame.mouse.get_pos())
+        if len(mouse_history) > 5: mouse_history.pop(0)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            
+            for i, btn in enumerate(mode_buttons):
+                old_sel = btn.selected
+                btn.handle_event(event)
+                if btn.selected and not old_sel:
+                    for j, other in enumerate(mode_buttons):
+                        if i != j: other.selected = False
+                    mode = btn.label
+
+            for i, btn in enumerate(quiz_buttons):
+                btn.handle_event(event)
+                if btn.selected:
+                    if i + 1 == correct_idx:
+                        feedback_text = "CORRECT! This axis mapping matches the tesseract's rotation."
+                        feedback_color = (100, 255, 100)
+                    else:
+                        feedback_text = "WRONG. Look closer at the dip/tuck/skew sync."
+                        feedback_color = (255, 100, 100)
+                    btn.selected = False
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if not any(b.rect.collidepoint(event.pos) for b in mode_buttons + quiz_buttons):
+                    dragging = True
+                    lastx, lasty = event.pos
+                    drag_start_pos = event.pos
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if dragging:
+                    dragging = False
+                    mx, my = event.pos
+                    total_dist = ((mx - drag_start_pos[0])**2 + (my - drag_start_pos[1])**2)**0.5
+                    old_mx, old_my = mouse_history[0]
+                    vx = (mx - old_mx) / (xsens * 2.5)
+                    vy = (my - old_my) / (ysens * 2.5)
+
+                    if total_dist > 15: 
+                        if abs(vx) > abs(vy) and abs(vx) > 0.1: dy = vx; dr = 0
+                        elif abs(vy) > 0.1: dr = vy; dy = 0
+                        else: dr, dy = 0, 0
+                    else: dr, dy = 0, 0
+                else: dr, dy = 0, 0
+
+            elif event.type == pygame.MOUSEMOTION and dragging:
+                mx, my = event.pos
+                vx_frame = (mx - lastx) / xsens
+                vy_frame = (my - lasty) / ysens
+                yaw -= vx_frame
+                roll -= vy_frame
+                lastx, lasty = mx, my
+                dr, dy = 0, 0
+
+            if event.type == pygame.MOUSEWHEEL:
+                if togglescroll:
+                    scroll_val = -event.y * 3
+                    if paused:
+                        for i in range(6):
+                            dips[i] = (dips[i] + scroll_val * a4_variants[i][0]) % 360
+                            tucks[i] = (tucks[i] + scroll_val * a4_variants[i][1]) % 360
+                            skews[i] = (skews[i] + scroll_val * a4_variants[i][2]) % 360
+                    d4 = scroll_val
+                else:
+                    if mode == 'Wireframe': ortho = max(0, min(0.005, ortho + event.y * 0.0002))
+                    elif mode == 'W-Shells': target_w += event.y * 10.0
+                    elif mode == 'CellHl': opacity = max(0.0, min(1.0, opacity + event.y * 0.05))
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE: paused = not paused
+                if event.key == pygame.K_LCTRL: togglescroll = False
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_LCTRL: togglescroll = True
+
+        # 3. Update Physics/Rotation
+        screen.fill((5, 5, 5))
+        yaw -= dy
+        roll -= dr
+        if not paused:
+            for i in range(6):
+                dips[i] = (dips[i] + d4 * a4_variants[i][0]) % 360
+                tucks[i] = (tucks[i] + d4 * a4_variants[i][1]) % 360
+                skews[i] = (skews[i] + d4 * a4_variants[i][2]) % 360
+        
+        # 4. Rendering Main Window
+        main_surf = pygame.Surface((WIDTH, HEIGHT - 250))
+        main_surf.fill((0, 0, 0))
+        for shape in main_shapes:
+            shape.rotate(yaw, 0, roll, dips[0], tucks[0], skews[0])
+            if mode == 'Wireframe': shape.shrink(ortho)
+            else: shape.shrink(0.001)
+        
+        if mode == 'Wireframe': renderers['Wireframe'].render(main_surf, main_shapes)
+        elif mode == 'W-Shells': renderers['W-Shells'].render(main_surf, main_shapes, target_w)
+        elif mode == 'CellHl': renderers['CellHl'].render(main_surf, main_shapes, opacity, set(), {})
+        
+        screen.blit(main_surf, (0, 0))
+        pygame.draw.line(screen, (100, 100, 100), (0, HEIGHT-250), (WIDTH, HEIGHT-250), 2)
+
+        # 5. Rendering 5 Origin Viewports
+        for i in range(1, 6):
+            origin_surf = pygame.Surface((200, 200))
+            origin_renderer.render(origin_surf, yaw, 0, roll, dips[i], tucks[i], skews[i], ortho)
+            screen.blit(origin_surf, (100 + (i-1)*210, HEIGHT - 240))
+            
+        # UI Overlays
+        for b in mode_buttons: b.draw(screen, font)
+        for b in quiz_buttons: b.draw(screen, font)
+        
+        q_text = big_font.render("Which origin axis matches the Tesseract's rotation logic?", True, (255, 255, 255))
+        screen.blit(q_text, (WIDTH//2 - q_text.get_width()//2, HEIGHT - 285))
+        f_surf = font.render(feedback_text, True, feedback_color)
+        screen.blit(f_surf, (WIDTH//2 - f_surf.get_width()//2, HEIGHT - 70))
+        instr = font.render("SCROLL to spin 4D axes | DRAG to rotate 3D | SPACE to pause", True, (150, 150, 150))
+        screen.blit(instr, (WIDTH - 450, 20))
+
+        pygame.display.flip()
+        clock.tick(60)
+        
+        # REQUIRED for PyScript: hand control back to the browser
+        await asyncio.sleep(0)
+
+    pygame.quit()
+
+def main():
+    asyncio.run(main_async())
+
+if __name__ == '__main__':
+    main()
