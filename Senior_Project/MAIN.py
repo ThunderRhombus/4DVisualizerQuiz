@@ -5,7 +5,6 @@ import asyncio
 from Tesseract import Tesseract
 from Cube import Cube
 from Tetrahedron import Tetrahedron
-from origin_viewer import spawn_origin_viewer
 from ThreeAxis import ThreeAxis
 
 # Import modular renderers
