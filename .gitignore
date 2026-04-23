@@ -2,3 +2,8 @@
 build/
 docs/
 *.apk
+.venv/
+build/
+docs/
+web_src/
+*.apk
