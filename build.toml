@@ -9,6 +9,13 @@ include = [
     "*.py",
 ]
 
+# Exclude pygame examples (they contain unsupported audio formats)
+exclude = [
+    "*/pygame/examples/*",
+    "*/pygame/examples",
+    "site-packages/pygame/examples",
+]
+
 # Output directory for the web build
 output_directory = "web_build"
 
