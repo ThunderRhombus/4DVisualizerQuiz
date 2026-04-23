@@ -1,0 +1,25 @@
+[project]
+name = "4d-visualizer-quiz"
+version = "1.0.0"
+description = "4D Tesseract Visualizer Quiz - Physics-accurate 4D geometry visualization"
+authors = [{name = "4D Visualizer Team"}]
+requires-python = ">=3.8"
+dependencies = [
+    "pygame-ce>=2.3.0",
+    "numpy>=1.24.0",
+]
+
+[tool.pygbag]
+title = "4D Visualizer Quiz"
+author = "4D Visualizer Team"
+version = "1.0.0"
+
+[tool.pygbag.web]
+fullscreen = false
+width = 1200
+height = 800
+debug = true
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

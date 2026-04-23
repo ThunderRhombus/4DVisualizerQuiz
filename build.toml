@@ -1,0 +1,33 @@
+[build]
+# Pygbag build configuration for 4D Visualizer Quiz
+title = "4D Visualizer Quiz"
+author = "4D Visualizer Team"
+version = "1.0.0"
+
+# Files and modules to include in the build
+include = [
+    "*.py",
+]
+
+# Output directory for the web build
+output_directory = "web_build"
+
+# Optional: Python version
+python_version = "3.12"
+
+# Web-specific options
+[build.web]
+# Enable fullscreen mode
+fullscreen = false
+
+# Canvas size (optional - can be overridden at runtime)
+width = 1200
+height = 800
+
+# Enable console debugging
+debug = true
+
+[build.dependencies]
+# pygame-ce is the Community Edition optimized for web
+pygame-ce = "*"
+numpy = "*"
