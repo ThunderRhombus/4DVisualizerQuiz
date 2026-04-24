@@ -190,8 +190,8 @@ class ToggleButton:
         return self.selected
 
 def main(a4=(0.1, 0.0, 0.0)):
-    from src.Tesseract import Tesseract
-    from src.origin_viewer import spawn_origin_viewer
+    from Tesseract import Tesseract
+    from origin_viewer import spawn_origin_viewer
     
     shared_arr = spawn_origin_viewer()
     pygame.init()

@@ -2,7 +2,7 @@ import multiprocessing as mp
 
 def run_origin_window(shared_arr):
     import pygame
-    from src.wAxis import wAxis
+    from wAxis import wAxis
     pygame.init()
     
     WIDTH, HEIGHT = 300, 300

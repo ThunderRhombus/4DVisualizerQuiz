@@ -1,7 +1,7 @@
 import math as m
 import numpy
-from src.Graph import Graph
-from src.ThreeShape import ThreeShape
+from Graph import Graph
+from ThreeShape import ThreeShape
 
 class Cube(ThreeShape):
     def __init__(self, size, ox, oy, oz):

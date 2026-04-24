@@ -1,23 +1,29 @@
+# /// script
+# dependencies = ["pygame-ce","numpy"]
+# ///
+
 """
 4D Visualizer Quiz - Web Version (pygbag)
 Main entry point for WebAssembly/Web deployment
 """
 
+import sys
+print("STARTING MAIN.PY", flush=True)
+print(f"Python version: {sys.version}", flush=True)
 import pygame
 import random
 import asyncio
-import sys
 import traceback
 
 try:
-    from src.Tesseract import Tesseract
-    from src.Cube import Cube
-    from src.Tetrahedron import Tetrahedron
-    from src.ThreeAxis import ThreeAxis
-    from src.MAINWireframe import WireframeRenderer
-    from src.MAINWShell import WShellRenderer
-    from src.MAINCellHl import CellHlRenderer, ToggleButton
-    from src.OriginRenderer import OriginRenderer
+    from Tesseract import Tesseract
+    from Cube import Cube
+    from Tetrahedron import Tetrahedron
+    from ThreeAxis import ThreeAxis
+    from MAINWireframe import WireframeRenderer
+    from MAINWShell import WShellRenderer
+    from MAINCellHl import CellHlRenderer, ToggleButton
+    from OriginRenderer import OriginRenderer
 except ImportError as e:
     print(f"[IMPORT_ERROR] Failed to import modules: {e}", file=sys.stderr)
     traceback.print_exc()
@@ -49,7 +55,7 @@ class OriginAxisViewer:
             self.axis = None
     
     def __import_axis(self):
-        from src.wAxis import wAxis
+        from wAxis import wAxis
         return wAxis(self.size, 0.001, 0, 0, 0, 0)
     
     def render(self, screen, state):
@@ -338,8 +344,5 @@ async def main_async():
         if screen is not None:
             pygame.quit()
             log_debug("Pygame quit successfully")
-
-
-import asyncio
 
 asyncio.run(main_async())
