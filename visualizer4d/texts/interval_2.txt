@@ -1,0 +1,7 @@
+You are entering the final set of questions.
+
+Keep an eye out for the Hard questions! They feature tri-axis
+rotations which can be very tricky to track. Try to identify
+the dominant rotation axis first.
+
+Click Continue when you are ready to finish the quiz.

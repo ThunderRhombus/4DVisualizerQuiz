@@ -1,0 +1,8 @@
+Great job completing the first set!
+
+Tip: You can pause the 4D rotation by pressing SPACE.
+While paused, scrolling will let you manually control the angle.
+This is a great way to inspect exactly how the vertices move
+and trace the internal structure.
+
+Click Continue when you are ready for the next 5 questions.

@@ -1,0 +1,10 @@
+Welcome to the 4D Visualizer Quiz!
+
+You will face 15 questions in total, divided into 3 sets of 5.
+Each set will have:
+- 2 Easy Questions (Rotation along 1 axis)
+- 2 Medium Questions (Rotation along 2 axes)
+- 1 Hard Question (Rotation along all 3 axes)
+
+Take your time to analyze the shapes.
+Click Continue when you are ready to begin.
