@@ -1,11 +1,10 @@
 import math as m
-import numpy
 from Graph import Graph
-from ThreeShape import ThreeShape
+from FourShape import FourShape
 
-class Cube(ThreeShape):
-    def __init__(self, size, ox, oy, oz):
-        super().__init__(size)
+class Cube(FourShape):
+    def __init__(self, size, ortho, ox, oy, oz):
+        super().__init__(size, ortho)
         self.v = [    (-size + ox, -size + oy, -size + oz),
                     (size + ox, -size + oy, -size + oz),
                     (size + ox, size + oy, -size + oz),
@@ -42,4 +41,3 @@ class Cube(ThreeShape):
         
         
         
-
