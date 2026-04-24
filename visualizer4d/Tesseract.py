@@ -4,6 +4,19 @@ from Graph import Graph
 from FourShape import FourShape
 
 class Tesseract(FourShape):
+
+    cell_labels = ["-w", "+w", "-z", "-y", "+x", "+y", "-x", "+z"]
+    cell_colors = {
+        0: (150, 150, 0),
+        1: (255, 255, 100),
+        2: (0, 0, 150),
+        3: (0, 150, 0),
+        4: (255, 100, 100),
+        5: (100, 255, 100),
+        6: (150, 0, 0),
+        7: (100, 100, 255),
+    }
+
     def __init__(self, size, ortho, ox, oy, oz, ow):
         super().__init__(size, ortho)
         self.v = [    (-size + ox, -size + oy, -size + oz, -size + ow),
@@ -85,20 +98,14 @@ class Tesseract(FourShape):
         self.faces.add_link((6, 30, 31, 18))
         self.faces.add_link((7, 31, 28, 19))
 
-        self.cells.add_link((0, 1, 2, 3, 4, 5)) ##-w
-        self.cells.add_link((6, 7, 8, 9, 10, 11)) ##+w
-        self.cells.add_link((0, 6, 12, 13, 14, 15)) ##-z
-        self.cells.add_link((1, 7, 12, 16, 17, 20)) ##-y
-        self.cells.add_link((2, 8, 13, 17, 18, 21)) ##+x
-        self.cells.add_link((3, 9, 14, 18, 19, 22)) ##+y
-        self.cells.add_link((4, 10, 15, 19, 16, 23)) ##-x
-        self.cells.add_link((5, 20, 21, 22, 23, 11)) ##+z
+        self.cells.add_link((0, 1, 2, 3, 4, 5))       ## 0  -w
+        self.cells.add_link((6, 7, 8, 9, 10, 11))      ## 1  +w
+        self.cells.add_link((0, 6, 12, 13, 14, 15))    ## 2  -z
+        self.cells.add_link((1, 7, 12, 16, 17, 20))    ## 3  -y
+        self.cells.add_link((2, 8, 13, 17, 18, 21))    ## 4  +x
+        self.cells.add_link((3, 9, 14, 18, 19, 22))    ## 5  +y
+        self.cells.add_link((4, 10, 15, 19, 16, 23))   ## 6  -x
+        self.cells.add_link((5, 20, 21, 22, 23, 11))   ## 7  +z
 
         for p in self.v:
             self.rv.append(p)
-
-
-        
-        
-        
-

@@ -10,6 +10,8 @@ try:
     from Cube import Cube
     from Tetrahedron import Tetrahedron
     from ThreeAxis import ThreeAxis
+    from FiveCell import FiveCell
+    from SixteenCell import SixteenCell
     from MAINWireframe import WireframeRenderer
     from MAINWShell import WShellRenderer
     from MAINCellHl import CellHlRenderer, ToggleButton
@@ -20,11 +22,9 @@ except ImportError as e:
     raise
 
 def log_debug(msg):
-    """Send debug message to console"""
     print(f"[4D-DEBUG] {msg}", file=sys.stdout)
 
 def log_error(msg):
-    """Send error message to stderr"""
     print(f"[4D-ERROR] {msg}", file=sys.stderr)
 
 async def main_async():
@@ -32,9 +32,8 @@ async def main_async():
     pygame_init_failed = False
     screen = None
     running = False
-    
+
     try:
-        # Initialize pygame with error handling
         log_debug("Initializing pygame...")
         try:
             pygame.init()
@@ -45,8 +44,7 @@ async def main_async():
             raise
 
         WIDTH, HEIGHT = 1200, 800
-        
-        # Set up display with error handling
+
         try:
             log_debug(f"Creating display: {WIDTH}x{HEIGHT}")
             screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -55,8 +53,7 @@ async def main_async():
         except Exception as e:
             log_error(f"Display creation failed: {e}")
             raise
-        
-        # Initialize clock and fonts
+
         try:
             clock = pygame.time.Clock()
             font = pygame.font.SysFont(None, 24)
@@ -69,17 +66,17 @@ async def main_async():
         # Interaction State
         yaw, pitch, roll = 0, 0, 0
         a4_correct = (0.1, 0.05, 0.02)
-        
+
         # Angles for each of the 6 viewports (Main + 5 Origins)
         dips = [0.0] * 6
         tucks = [0.0] * 6
         skews = [0.0] * 6
-        
+
         # a4 variants for the 5 options
         correct_idx = random.randint(1, 5)
         a4_variants = [None] * 6
-        a4_variants[0] = a4_correct # Main window
-        
+        a4_variants[0] = a4_correct  # Main window
+
         for i in range(1, 6):
             if i == correct_idx:
                 a4_variants[i] = a4_correct
@@ -101,20 +98,19 @@ async def main_async():
         lastx, lasty = mousex, mousey
         drag_start_pos = (0, 0)
         dragging = False
-        xsens, ysens = WIDTH/180, HEIGHT/180
+        xsens, ysens = WIDTH / 180, HEIGHT / 180
         dy, dr = 0, 0
         curr_vx, curr_vy = 0, 0
         d4 = 0
         paused = False
         togglescroll = True
-        
-        # Initialize renderers with error handling
+
         log_debug("Initializing renderers...")
         try:
             renderers = {
                 'Wireframe': WireframeRenderer(WIDTH, HEIGHT - 250, a4=a4_correct),
-                'W-Shells': WShellRenderer(WIDTH, HEIGHT - 250, a4=a4_correct),
-                'CellHl': CellHlRenderer(WIDTH, HEIGHT - 250, a4=a4_correct)
+                'W-Shells':  WShellRenderer(WIDTH, HEIGHT - 250, a4=a4_correct),
+                'CellHl':    CellHlRenderer(WIDTH, HEIGHT - 250, a4=a4_correct)
             }
             mode = 'Wireframe'
             origin_renderer = OriginRenderer(200, 200, size=50)
@@ -123,13 +119,14 @@ async def main_async():
             log_error(f"Renderer initialization failed: {e}")
             raise
 
-        # Initialize shapes with error handling
         log_debug("Initializing shapes...")
         try:
             size = 100
             ortho = 0.001
             main_shapes = [
-                Tesseract(size, ortho, 0, 0, 0, 0),
+                #Tesseract(size, ortho, 0, 0, 0, 0),
+                #FiveCell(size, ortho, 0, 0, 0, 0),
+                SixteenCell(2*size, ortho, 0, 0, 0, 0),
                 ThreeAxis(75, ortho, 0, 0, 0)
             ]
             log_debug("Shapes initialized successfully")
@@ -140,44 +137,59 @@ async def main_async():
         # Renderer specific settings
         target_w = 0.0
         opacity = 1.0
-        
-        # UI Elements
+
+        # --- Shape-driven cell button builder ---
+        def build_cell_buttons(shape):
+            labels = getattr(shape, 'cell_labels', [])
+            colors = getattr(shape, 'cell_colors', {})
+            buttons = []
+            for idx, label in enumerate(labels):
+                color = colors.get(idx, (150, 150, 150))
+                buttons.append(
+                    ToggleButton(WIDTH - 60, 40 + idx * 30, 50, 25, label, color)
+                )
+            return buttons, labels, colors
+
+        # Mode buttons
         mode_buttons = [
             ToggleButton(20, 20, 100, 30, "Wireframe", (100, 100, 255)),
-            ToggleButton(130, 20, 100, 30, "W-Shells", (100, 255, 100)),
-            ToggleButton(240, 20, 100, 30, "CellHl", (255, 100, 100))
+            ToggleButton(130, 20, 100, 30, "W-Shells",  (100, 255, 100)),
+            ToggleButton(240, 20, 100, 30, "CellHl",    (255, 100, 100))
         ]
         mode_buttons[0].selected = True
+
+        # Shape selector buttons (only shapes that have cell_labels)
+        shape_4d = [s for s in main_shapes if hasattr(s, 'cell_labels')]
+        shape_buttons = []
+        for i, s in enumerate(shape_4d):
+            shape_buttons.append(
+                ToggleButton(350 + i * 120, 20, 110, 30, type(s).__name__, (180, 100, 180))
+            )
+        shape_buttons[0].selected = True
+        active_shape_idx = 0
+        active_shape = shape_4d[0]
+
+        # Build initial cell buttons from first shape
+        cell_buttons, button_labels, cell_colors = build_cell_buttons(active_shape)
 
         # Quiz selection buttons
         quiz_buttons = []
         for i in range(5):
-            quiz_buttons.append(ToggleButton(100 + i*210, HEIGHT - 40, 200, 30, f"Option {i+1}", (150, 150, 150)))
+            quiz_buttons.append(
+                ToggleButton(100 + i * 210, HEIGHT - 40, 200, 30, f"Option {i+1}", (150, 150, 150))
+            )
         feedback_text = ""
         feedback_color = (255, 255, 255)
         mouse_history = [(0, 0)] * 5
 
-        # Cell highlight buttons (from MAINCellHl standalone)
-        button_labels = ["+x", "-x", "+y", "-y", "+z", "-z", "+w", "-w"]
-        label_to_cell = {"+x": 4, "-x": 6, "+y": 5, "-y": 3, "+z": 7, "-z": 2, "+w": 1, "-w": 0}
-        cell_colors = {
-            0: (150, 150, 0), 1: (255, 255, 100), 2: (0, 0, 150), 3: (0, 150, 0),
-            4: (255, 100, 100), 5: (100, 255, 100), 6: (150, 0, 0), 7: (100, 100, 255),
-        }
-        cell_buttons = []
-        for idx, label in enumerate(button_labels):
-            cell_buttons.append(
-                ToggleButton(WIDTH - 50, 40 + idx * 40, 30, 30, label, cell_colors[label_to_cell[label]])
-            )
-
         running = True
         frame_count = 0
         log_debug("Main game loop starting...")
-        
+
         while running:
             try:
                 frame_count += 1
-                
+
                 mouse_history.append(pygame.mouse.get_pos())
                 if len(mouse_history) > 5: mouse_history.pop(0)
 
@@ -185,7 +197,8 @@ async def main_async():
                     try:
                         if event.type == pygame.QUIT:
                             running = False
-                        
+
+                        # Mode buttons (radio)
                         for i, btn in enumerate(mode_buttons):
                             old_sel = btn.selected
                             btn.handle_event(event)
@@ -194,6 +207,18 @@ async def main_async():
                                     if i != j: other.selected = False
                                 mode = btn.label
 
+                        # Shape selector buttons (radio) — rebuild cell buttons on change
+                        for i, btn in enumerate(shape_buttons):
+                            old_sel = btn.selected
+                            btn.handle_event(event)
+                            if btn.selected and not old_sel:
+                                for j, other in enumerate(shape_buttons):
+                                    if i != j: other.selected = False
+                                active_shape_idx = i
+                                active_shape = shape_4d[i]
+                                cell_buttons, button_labels, cell_colors = build_cell_buttons(active_shape)
+
+                        # Cell buttons — only active in CellHl mode
                         if mode == 'CellHl':
                             for b in cell_buttons:
                                 b.handle_event(event)
@@ -201,6 +226,7 @@ async def main_async():
                             for b in cell_buttons:
                                 b.selected = False
 
+                        # Quiz buttons
                         for i, btn in enumerate(quiz_buttons):
                             btn.handle_event(event)
                             if btn.selected:
@@ -212,9 +238,9 @@ async def main_async():
                                     feedback_color = (255, 100, 100)
                                 btn.selected = False
 
-
                         if event.type == pygame.MOUSEBUTTONDOWN:
-                            if not any(b.rect.collidepoint(event.pos) for b in mode_buttons + quiz_buttons + cell_buttons):
+                            if not any(b.rect.collidepoint(event.pos)
+                                       for b in mode_buttons + quiz_buttons + cell_buttons + shape_buttons):
                                 dragging = True
                                 lastx, lasty = event.pos
                                 drag_start_pos = event.pos
@@ -226,8 +252,7 @@ async def main_async():
                                 old_mx, old_my = mouse_history[0]
                                 vx = (mx - old_mx) / (xsens * 2.5)
                                 vy = (my - old_my) / (ysens * 2.5)
-
-                                if total_dist > 15: 
+                                if total_dist > 15:
                                     if abs(vx) > abs(vy) and abs(vx) > 0.1: dy = vx; dr = 0
                                     elif abs(vy) > 0.1: dr = vy; dy = 0
                                     else: dr, dy = 0, 0
@@ -248,21 +273,21 @@ async def main_async():
                                 scroll_val = -event.y * 3
                                 if paused:
                                     for i in range(6):
-                                        dips[i] = (dips[i] + scroll_val * a4_variants[i][0]) % 360
+                                        dips[i]  = (dips[i]  + scroll_val * a4_variants[i][0]) % 360
                                         tucks[i] = (tucks[i] + scroll_val * a4_variants[i][1]) % 360
                                         skews[i] = (skews[i] + scroll_val * a4_variants[i][2]) % 360
                                 d4 = scroll_val
                             else:
                                 if mode == 'Wireframe': ortho = max(0, min(0.005, ortho + event.y * 0.0002))
                                 elif mode == 'W-Shells': target_w += event.y * 10.0
-                                elif mode == 'CellHl': opacity = max(0.0, min(1.0, opacity + event.y * 0.05))
+                                elif mode == 'CellHl':   opacity = max(0.0, min(1.0, opacity + event.y * 0.05))
 
                         if event.type == pygame.KEYDOWN:
                             if event.key == pygame.K_SPACE: paused = not paused
                             if event.key == pygame.K_LCTRL: togglescroll = False
                         if event.type == pygame.KEYUP:
                             if event.key == pygame.K_LCTRL: togglescroll = True
-                    
+
                     except Exception as e:
                         log_error(f"Event handling error (frame {frame_count}): {e}")
 
@@ -273,58 +298,67 @@ async def main_async():
                     roll -= dr
                     if not paused:
                         for i in range(6):
-                            dips[i] = (dips[i] + d4 * a4_variants[i][0]) % 360
+                            dips[i]  = (dips[i]  + d4 * a4_variants[i][0]) % 360
                             tucks[i] = (tucks[i] + d4 * a4_variants[i][1]) % 360
                             skews[i] = (skews[i] + d4 * a4_variants[i][2]) % 360
-                    
-                    # Rendering Main Window
+
+                    # Main viewport
                     main_surf = pygame.Surface((WIDTH, HEIGHT - 250))
                     main_surf.fill((0, 0, 0))
                     for shape in main_shapes:
                         shape.rotate(yaw, 0, roll, dips[0], tucks[0], skews[0])
                         if mode == 'Wireframe': shape.shrink(ortho)
                         else: shape.shrink(0.001)
-                    
-                    cellhl = set()
-                    for i, label in enumerate(button_labels):
-                        if cell_buttons[i].getsel():
-                            cellhl.add(label_to_cell[label])
-                    if mode == 'Wireframe': renderers['Wireframe'].render(main_surf, main_shapes)
-                    elif mode == 'W-Shells': renderers['W-Shells'].render(main_surf, main_shapes, target_w)
-                    elif mode == 'CellHl': renderers['CellHl'].render(main_surf, main_shapes, opacity, cellhl, cell_colors)
-                    
-                    screen.blit(main_surf, (0, 0))
-                    pygame.draw.line(screen, (100, 100, 100), (0, HEIGHT-250), (WIDTH, HEIGHT-250), 2)
 
-                    # Rendering 5 Origin Viewports
+                    # Active cells from shape-driven buttons (direct index mapping)
+                    cellhl = set()
+                    for i, btn in enumerate(cell_buttons):
+                        if btn.getsel():
+                            cellhl.add(i)
+
+                    if mode == 'Wireframe':
+                        renderers['Wireframe'].render(main_surf, main_shapes)
+                    elif mode == 'W-Shells':
+                        renderers['W-Shells'].render(main_surf, main_shapes, target_w)
+                    elif mode == 'CellHl':
+                        renderers['CellHl'].render(main_surf, main_shapes, opacity, cellhl, cell_colors)
+
+                    screen.blit(main_surf, (0, 0))
+                    pygame.draw.line(screen, (100, 100, 100), (0, HEIGHT - 250), (WIDTH, HEIGHT - 250), 2)
+
+                    # 5 origin viewports
                     for i in range(1, 6):
                         origin_surf = pygame.Surface((200, 200))
                         origin_renderer.render(origin_surf, yaw, 0, roll, dips[i], tucks[i], skews[i], ortho)
-                        screen.blit(origin_surf, (100 + (i-1)*210, HEIGHT - 240))
-                        
-                    # UI Overlays
-                    for b in mode_buttons: b.draw(screen, font)
+                        screen.blit(origin_surf, (100 + (i - 1) * 210, HEIGHT - 240))
+
+                    # UI overlays
+                    for b in mode_buttons:   b.draw(screen, font)
+                    for b in shape_buttons:  b.draw(screen, font)
                     if mode == 'CellHl':
-                        for b in cell_buttons:b.draw(screen, font)
-                    for b in quiz_buttons: b.draw(screen, font)
-                    
-                    q_text = big_font.render("Which origin axis matches the Tesseract's rotation logic?", True, (255, 255, 255))
-                    screen.blit(q_text, (WIDTH//2 - q_text.get_width()//2, HEIGHT - 285))
+                        for b in cell_buttons: b.draw(screen, font)
+                    for b in quiz_buttons:   b.draw(screen, font)
+
+                    q_text = big_font.render(
+                        "Which origin axis matches the Tesseract's rotation logic?", True, (255, 255, 255))
+                    screen.blit(q_text, (WIDTH // 2 - q_text.get_width() // 2, HEIGHT - 285))
                     f_surf = font.render(feedback_text, True, feedback_color)
-                    screen.blit(f_surf, (WIDTH//2 - f_surf.get_width()//2, HEIGHT - 70))
-                    instr = font.render("SCROLL to spin 4D axes | DRAG to rotate 3D | SPACE to pause", True, (150, 150, 150))
-                    screen.blit(instr, (WIDTH - 450, 20))
+                    screen.blit(f_surf, (WIDTH // 2 - f_surf.get_width() // 2, HEIGHT - 70))
+                    instr = font.render(
+                        "SCROLL to spin 4D axes | DRAG to rotate 3D | SPACE to pause | CTRL+SCROLL for mode options",
+                        True, (150, 150, 150))
+                    screen.blit(instr, (WIDTH // 2 - instr.get_width() // 2, HEIGHT - 15))
 
                     pygame.display.flip()
                     clock.tick(60)
-                    
+
                 except Exception as e:
                     log_error(f"Rendering error (frame {frame_count}): {e}")
                     traceback.print_exc()
-                
+
                 # REQUIRED for PyScript: hand control back to the browser
                 await asyncio.sleep(0)
-                
+
             except Exception as e:
                 log_error(f"Frame loop error (frame {frame_count}): {e}")
                 traceback.print_exc()
