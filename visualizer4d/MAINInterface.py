@@ -153,10 +153,22 @@ async def main_async():
         quiz_buttons = []
         for i in range(5):
             quiz_buttons.append(ToggleButton(100 + i*210, HEIGHT - 40, 200, 30, f"Option {i+1}", (150, 150, 150)))
-
         feedback_text = ""
         feedback_color = (255, 255, 255)
         mouse_history = [(0, 0)] * 5
+
+        # Cell highlight buttons (from MAINCellHl standalone)
+        button_labels = ["+x", "-x", "+y", "-y", "+z", "-z", "+w", "-w"]
+        label_to_cell = {"+x": 4, "-x": 6, "+y": 5, "-y": 3, "+z": 7, "-z": 2, "+w": 1, "-w": 0}
+        cell_colors = {
+            0: (150, 150, 0), 1: (255, 255, 100), 2: (0, 0, 150), 3: (0, 150, 0),
+            4: (255, 100, 100), 5: (100, 255, 100), 6: (150, 0, 0), 7: (100, 100, 255),
+        }
+        cell_buttons = []
+        for idx, label in enumerate(button_labels):
+            cell_buttons.append(
+                ToggleButton(WIDTH - 50, 40 + idx * 40, 30, 30, label, cell_colors[label_to_cell[label]])
+            )
 
         running = True
         frame_count = 0
@@ -182,6 +194,13 @@ async def main_async():
                                     if i != j: other.selected = False
                                 mode = btn.label
 
+                        if mode == 'CellHl':
+                            for b in cell_buttons:
+                                b.handle_event(event)
+                        else:
+                            for b in cell_buttons:
+                                b.selected = False
+
                         for i, btn in enumerate(quiz_buttons):
                             btn.handle_event(event)
                             if btn.selected:
@@ -193,8 +212,9 @@ async def main_async():
                                     feedback_color = (255, 100, 100)
                                 btn.selected = False
 
+
                         if event.type == pygame.MOUSEBUTTONDOWN:
-                            if not any(b.rect.collidepoint(event.pos) for b in mode_buttons + quiz_buttons):
+                            if not any(b.rect.collidepoint(event.pos) for b in mode_buttons + quiz_buttons + cell_buttons):
                                 dragging = True
                                 lastx, lasty = event.pos
                                 drag_start_pos = event.pos
@@ -265,9 +285,13 @@ async def main_async():
                         if mode == 'Wireframe': shape.shrink(ortho)
                         else: shape.shrink(0.001)
                     
+                    cellhl = set()
+                    for i, label in enumerate(button_labels):
+                        if cell_buttons[i].getsel():
+                            cellhl.add(label_to_cell[label])
                     if mode == 'Wireframe': renderers['Wireframe'].render(main_surf, main_shapes)
                     elif mode == 'W-Shells': renderers['W-Shells'].render(main_surf, main_shapes, target_w)
-                    elif mode == 'CellHl': renderers['CellHl'].render(main_surf, main_shapes, opacity, set(), {})
+                    elif mode == 'CellHl': renderers['CellHl'].render(main_surf, main_shapes, opacity, cellhl, cell_colors)
                     
                     screen.blit(main_surf, (0, 0))
                     pygame.draw.line(screen, (100, 100, 100), (0, HEIGHT-250), (WIDTH, HEIGHT-250), 2)
@@ -280,6 +304,8 @@ async def main_async():
                         
                     # UI Overlays
                     for b in mode_buttons: b.draw(screen, font)
+                    if mode == 'CellHl':
+                        for b in cell_buttons:b.draw(screen, font)
                     for b in quiz_buttons: b.draw(screen, font)
                     
                     q_text = big_font.render("Which origin axis matches the Tesseract's rotation logic?", True, (255, 255, 255))
