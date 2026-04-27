@@ -5,15 +5,19 @@ from FourShape import FourShape
 class Cube(FourShape):
     def __init__(self, size, ortho, ox, oy, oz):
         super().__init__(size, ortho)
-        self.v = [    (-size + ox, -size + oy, -size + oz),
-                    (size + ox, -size + oy, -size + oz),
-                    (size + ox, size + oy, -size + oz),
-                    (-size + ox, size + oy, -size + oz),
-                    (-size + ox, -size + oy, size + oz),
-                    (size + ox, -size + oy, size + oz),
-                    (size + ox, size + oy, size + oz),
-                    (-size + ox, size + oy, size + oz)]    
-    
+        # All vertices are 4-tuples (x, y, z, w=0)
+        # so FourShape.rotate() can safely index p[3]
+        self.v = [
+            (-size + ox, -size + oy, -size + oz, 0),
+            ( size + ox, -size + oy, -size + oz, 0),
+            ( size + ox,  size + oy, -size + oz, 0),
+            (-size + ox,  size + oy, -size + oz, 0),
+            (-size + ox, -size + oy,  size + oz, 0),
+            ( size + ox, -size + oy,  size + oz, 0),
+            ( size + ox,  size + oy,  size + oz, 0),
+            (-size + ox,  size + oy,  size + oz, 0),
+        ]
+
         self.edges.add_link((0, 1))
         self.edges.add_link((1, 2))
         self.edges.add_link((2, 3))
@@ -26,7 +30,7 @@ class Cube(FourShape):
         self.edges.add_link((1, 5))
         self.edges.add_link((2, 6))
         self.edges.add_link((3, 7))
-        
+
         self.faces.add_link((0, 1, 2, 3))
         self.faces.add_link((0, 4, 8, 9))
         self.faces.add_link((1, 5, 9, 10))
@@ -36,8 +40,4 @@ class Cube(FourShape):
 
         for p in self.v:
             self.rv.append(p)
-
-
-        
-        
-        
+            self.ov.append(p)
