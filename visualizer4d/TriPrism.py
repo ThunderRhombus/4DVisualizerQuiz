@@ -10,14 +10,22 @@ class TriPrism(FourShape):
              3 square-pyramid cells (one per rectangular face).
     """
 
-    # Ordered: W caps first (top/bottom), then the three lateral walls A/B/C
-    cell_labels = ["+W cap", "-W cap", "wall A", "wall B", "wall C"]
+    cell_labels = [
+        "+W Cap (Z+)", "+W Cap (Z-)", "-W Cap (Z+)", "-W Cap (Z-)",
+        "+W Front Wall", "+W Left Wall", "+W Right Wall",
+        "-W Front Wall", "-W Left Wall", "-W Right Wall"
+    ]
     cell_colors = {
-        0: (255, 220,  80),   # +W cap  — gold
-        1: ( 80, 160, 255),   # -W cap  — sky blue
-        2: (255, 100, 100),   # wall A  — red
-        3: (100, 255, 120),   # wall B  — green
-        4: (200,  80, 255),   # wall C  — purple
+        0: (255, 220,  80),
+        1: (255, 180,  80),
+        2: ( 80, 160, 255),
+        3: (100, 140, 255),
+        4: (255, 100, 100),
+        5: (100, 255, 120),
+        6: (200,  80, 255),
+        7: (200,  60,  60),
+        8: ( 60, 200,  60),
+        9: (120,  60, 200),
     }
 
     def __init__(self, size, ortho, ox, oy, oz, ow):
@@ -56,14 +64,11 @@ class TriPrism(FourShape):
                 self.edges.add_link((k[0], k[1]))
 
         def ei(a, b):
-            try:
-                return edge_idx[(min(a,b), max(a,b))]
-            except KeyError:
-                # If we need a diagonal for a face, we must add it as an edge
-                k = (min(a,b), max(a,b))
+            k = (min(a,b), max(a,b))
+            if k not in edge_idx:
                 edge_idx[k] = len(edge_idx)
                 self.edges.add_link(k)
-                return edge_idx[k]
+            return edge_idx[k]
 
         face_idx = {}
         def add_face(verts):
@@ -83,18 +88,32 @@ class TriPrism(FourShape):
         for a, b in prism_edges:
             add_face((a, b, 6)); add_face((a, b, 7))
 
-        def fi(*v): return face_idx[tuple(sorted(v))]
+        def fi(*v):
+            k = tuple(sorted(v))
+            return face_idx[k]
 
-        # Cells
-        # Cell 0 & 1: Dipyramids over the triangular bases
-        self.cells.add_link([fi(0,1,6), fi(1,2,6), fi(2,0,6), fi(0,1,7), fi(1,2,7), fi(2,0,7)])
-        self.cells.add_link([fi(3,4,6), fi(4,5,6), fi(5,3,6), fi(3,4,7), fi(4,5,7), fi(5,3,7)])
+        # Boundary Cells: Pyramid over every face of the prism to each W-apex
         
-        # Walls: Dipyramids over the rectangular side faces
-        walls = [(0,1,4,3), (1,2,5,4), (2,0,3,5)]
-        for w_v in walls:
-            edges = [(w_v[i], w_v[(i+1)%4]) for i in range(4)]
-            self.cells.add_link([fi(a,b,6) for a,b in edges] + [fi(a,b,7) for a,b in edges])
+        # Base Triangles (0,1,2) and (3,4,5) to +W (6) and -W (7)
+        # Cell 0: +W Top Tri
+        self.cells.add_link((fi(0,1,2), fi(0,1,6), fi(1,2,6), fi(2,0,6)))
+        # Cell 1: +W Bot Tri
+        self.cells.add_link((fi(3,4,5), fi(3,4,6), fi(4,5,6), fi(5,3,6)))
+        # Cell 2: -W Top Tri
+        self.cells.add_link((fi(0,1,2), fi(0,1,7), fi(1,2,7), fi(2,0,7)))
+        # Cell 3: -W Bot Tri
+        self.cells.add_link((fi(3,4,5), fi(3,4,7), fi(4,5,7), fi(5,3,7)))
 
+        # Rectangular Walls to +W (6) and -W (7)
+        walls = [(0,1,4,3), (1,2,5,4), (2,0,3,5)]
+        # Cells 4-6: +W walls
+        for w_v in walls:
+            e_pairs = [(w_v[i], w_v[(i+1)%4]) for i in range(4)]
+            self.cells.add_link([fi(*w_v)] + [fi(a,b,6) for a,b in e_pairs])
+        # Cells 7-9: -W walls
+        for w_v in walls:
+            e_pairs = [(w_v[i], w_v[(i+1)%4]) for i in range(4)]
+            self.cells.add_link([fi(*w_v)] + [fi(a,b,7) for a,b in e_pairs])
+            
         for p in self.v:
             self.rv.append(p)

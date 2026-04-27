@@ -11,6 +11,8 @@ class OriginRenderer:
         self.tuning = 0.2
 
     def render(self, surface, yaw, pitch, roll, dip, tuck, skew, ortho):
+        w_mid = surface.get_width() // 2
+        h_mid = surface.get_height() // 2
         surface.fill((15, 15, 15))
         pygame.draw.rect(surface, (60, 60, 60), surface.get_rect(), 1)
         
@@ -26,8 +28,8 @@ class OriginRenderer:
                     p2 = self.axis.ov[n[1]]
                     c = (80, 80, 80)
                     pygame.draw.line(surface, c, 
-                        (self.WIDTH//2 + round(p1[0]), self.HEIGHT//2 + round(p1[1])),
-                        (self.WIDTH//2 + round(p2[0]), self.HEIGHT//2 + round(p2[1])), 1)
+                        (w_mid + round(p1[0]), h_mid + round(p1[1])),
+                        (w_mid + round(p2[0]), h_mid + round(p2[1])), 1)
 
         # Draw dimensional nodes and labels
         for p in range(len(self.axis.ov)):
@@ -43,8 +45,8 @@ class OriginRenderer:
                 b_c = max(0, min(255, int(g_val - d_val)))
                 g_c = max(0, min(255, int(g_val)))
                 
-                sx = self.WIDTH//2 + round(self.axis.ov[p][0])
-                sy = self.HEIGHT//2 + round(self.axis.ov[p][1])
+                sx = w_mid + round(self.axis.ov[p][0])
+                sy = h_mid + round(self.axis.ov[p][1])
                 
                 pygame.draw.circle(surface, (r_c, g_c, b_c), (sx, sy), 6)
                 text_surf = self.font.render(text, True, (200, 200, 200))

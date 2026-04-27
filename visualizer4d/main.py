@@ -258,29 +258,29 @@ class Dropdown:
         return pygame.Rect(self.x, self.y, self.w, self.h)
 
     def _item_rect(self, i):
-        return pygame.Rect(self.x, self.y + self.h + i * self.h, self.w, self.h)
+        return pygame.Rect(self.x, self.y - (len(self.options) - i) * self.h, self.w, self.h)
 
     def handle_event(self, event):
-        changed = False
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self._header_rect().collidepoint(event.pos):
                 self.open = not self.open
-                return False
+                return True
             if self.open:
                 for i in range(len(self.options)):
                     if self._item_rect(i).collidepoint(event.pos):
                         self.selected = i
                         self.open = False
-                        changed = True
-                        return changed
+                        return "CHANGED"
                 # Click outside — close
                 self.open = False
+                return True
         elif event.type == pygame.MOUSEMOTION and self.open:
             self._hover = -1
             for i in range(len(self.options)):
                 if self._item_rect(i).collidepoint(event.pos):
                     self._hover = i
-        return changed
+                    return True
+        return False
 
     def draw(self, surface, font):
         hr = self._header_rect()
@@ -512,10 +512,9 @@ async def main_async():
         togglescroll  = True
         ortho         = 0.001
 
-        # Show origin overlay in quiz/free modes
-        show_origin = True
-        # Show W-axis on origin overlay
-        show_w_axis = True
+        # Visibility toggles
+        show_three_axis = True # The origin inside the object
+        show_4d_overlay  = True # The 4D origin window in the corner
 
         # FIX: track free_shape_idx as a plain variable; mutations go through
         # rebuild_free_shape() which is always called from main_async scope.
@@ -627,8 +626,8 @@ async def main_async():
 
         # FIX: Origin toggle buttons store their on/off state via .selected (a bool).
         # We update .label (not .text — ToggleButton has no .text attribute) to reflect state.
-        btn_toggle_origin = ToggleButton(0, 0, 110, 28, "Origin: ON",  (80, 120, 160))
-        btn_toggle_waxis  = ToggleButton(0, 0, 110, 28, "W-axis: ON",  (80, 160, 120))
+        btn_toggle_origin = ToggleButton(0, 0, 125, 28, "ThreeAxis: ON", (80, 120, 160))
+        btn_toggle_waxis  = ToggleButton(0, 0, 125, 28, "4D Origin: ON", (80, 160, 120))
         btn_toggle_origin.selected = True
         btn_toggle_waxis.selected  = True
 
@@ -684,18 +683,13 @@ async def main_async():
         def layout_free():
             hud_top = HEIGHT - FREE_HUD + 8
 
-            bx = 90
-            for b in free_mode_btns:
-                b.rect.x = bx; b.rect.y = hud_top
-                bx += b.rect.width + 6
+            shape_dropdown.x = 90
+            shape_dropdown.y = hud_top + 42
 
-            shape_dropdown.x = 450
-            shape_dropdown.y = hud_top - 240
-
-            btn_toggle_origin.rect.x = shape_dropdown.x + shape_dropdown.w + 12
-            btn_toggle_origin.rect.y = shape_dropdown.y
+            btn_toggle_origin.rect.x = 90 + 160 + 12
+            btn_toggle_origin.rect.y = hud_top + 42
             btn_toggle_waxis.rect.x  = btn_toggle_origin.rect.right + 8
-            btn_toggle_waxis.rect.y  = shape_dropdown.y
+            btn_toggle_waxis.rect.y  = hud_top + 42
 
             slider_x = WIDTH // 2 + 20
             row_h    = 44
@@ -715,13 +709,13 @@ async def main_async():
         def make_pool(o):
             s = 100
             constructors = [
-                (Tesseract,        s,       "Tesseract"),
-                (FiveCell,         1.2*s,   "FiveCell"),
-                (SixteenCell,      1.2*s,   "SixteenCell"),
-                (TriPrism,         s,       "TriPrism"),
-                (SquareAntiprisma, s,       "SquareAntiprisma"),
-                (TetraBipyramid,   s,       "TetraBipyramid"),
-                (WedgeCell,        s,       "WedgeCell"),
+                (Tesseract,        s,      "Tesseract"),
+                (FiveCell,         1.5*s,  "FiveCell"),
+                (SixteenCell,      1.3*s,  "SixteenCell"),
+                (TriPrism,         1.1*s,  "TriPrism"),
+                (SquareAntiprisma, 1.1*s,  "SquareAntiprisma"),
+                (TetraBipyramid,   1.1*s,  "TetraBipyramid"),
+                (WedgeCell,        1.1*s,  "WedgeCell"),
             ]
             pool = []
             for cls, size, name in constructors:
@@ -754,7 +748,7 @@ async def main_async():
                 return
             active_shape = shape
             try:
-                axes_shape = ThreeAxis(75, ortho, 0, 0, 0)
+                axes_shape = ThreeAxis(60, ortho, 0, 0, 0)
             except Exception as e:
                 print(f"[4D] ThreeAxis failed — {e}", flush=True)
                 axes_shape = None
@@ -912,6 +906,7 @@ async def main_async():
                 pending_shape_idx = None
 
                 for event in pygame.event.get():
+                    ev_consumed = False
                     try:
                         if event.type == pygame.QUIT:
                             running = False
@@ -1053,113 +1048,123 @@ async def main_async():
 
                         # ---- FREE MODE ----
                         elif state == "FREE_MODE":
-                            # Sliders first
-                            consumed = any(s.handle_event(event) for s in sliders)
-                            if not consumed:
-                                # Close dropdown on clicks outside it
-                                if (event.type == pygame.MOUSEBUTTONDOWN and
-                                        shape_dropdown.is_open and
-                                        not pygame.Rect(shape_dropdown.x,
-                                                        shape_dropdown.y,
-                                                        shape_dropdown.w,
-                                                        shape_dropdown.h * (len(SHAPE_NAMES)+1)
-                                                        ).collidepoint(event.pos)):
-                                    shape_dropdown.close()
+                            ev_consumed = any(s.handle_event(event) for s in sliders)
+                        if not ev_consumed:
+                            # Close dropdown on clicks outside it
+                            if (event.type == pygame.MOUSEBUTTONDOWN and
+                                    shape_dropdown.is_open and
+                                    not pygame.Rect(shape_dropdown.x,
+                                                    shape_dropdown.y - len(SHAPE_NAMES)*shape_dropdown.h,
+                                                    shape_dropdown.w,
+                                                    shape_dropdown.h * (len(SHAPE_NAMES)+1)
+                                                    ).collidepoint(event.pos)):
+                                shape_dropdown.close()
+                                ev_consumed = True
 
+                            if not ev_consumed:
                                 # Mode buttons
                                 for i,b in enumerate(free_mode_btns):
                                     b.handle_event(event)
                                     if b.selected and FREE_MODES[i] != mode:
                                         mode = FREE_MODES[i]; update_free_sel()
 
-                                # Shape dropdown — record any selection change for
-                                # processing after the event loop (avoids nonlocal issues)
-                                changed = shape_dropdown.handle_event(event)
-                                if changed and shape_dropdown.selected != free_shape_idx:
-                                    pending_shape_idx = shape_dropdown.selected
+                                # Shape dropdown
+                                drop_res = shape_dropdown.handle_event(event)
+                                if drop_res:
+                                    ev_consumed = True
+                                    if drop_res == "CHANGED" and shape_dropdown.selected != free_shape_idx:
+                                        pending_shape_idx = shape_dropdown.selected
 
-                                # FIX: update .label (not .text) on ToggleButton for origin toggles
+                                # Origin toggles
                                 prev_origin = btn_toggle_origin.selected
                                 btn_toggle_origin.handle_event(event)
                                 if btn_toggle_origin.selected != prev_origin:
-                                    show_origin = btn_toggle_origin.selected
-                                    btn_toggle_origin.label = "Origin: ON" if show_origin else "Origin: OFF"
+                                    show_three_axis = btn_toggle_origin.selected
+                                    btn_toggle_origin.label = "ThreeAxis: ON" if show_three_axis else "ThreeAxis: OFF"
+                                    ev_consumed = True
 
                                 prev_waxis = btn_toggle_waxis.selected
                                 btn_toggle_waxis.handle_event(event)
                                 if btn_toggle_waxis.selected != prev_waxis:
-                                    show_w_axis = btn_toggle_waxis.selected
-                                    btn_toggle_waxis.label = "W-axis: ON" if show_w_axis else "W-axis: OFF"
+                                    show_4d_overlay = btn_toggle_waxis.selected
+                                    btn_toggle_waxis.label = "4D Origin: ON" if show_4d_overlay else "4D Origin: OFF"
+                                    ev_consumed = True
 
                                 if mode == 'CellHl':
                                     for b in cell_buttons: b.handle_event(event)
 
-                        # ---- Viewport drag (all non-tutorial states) ----
-                        slider_hot = any(s.is_dragging for s in sliders)
+                            # ---- Viewport drag (all non-tutorial states) ----
+                            slider_hot = any(s.is_dragging for s in sliders) or (state == "FREE_MODE" and ev_consumed)
 
-                        if state != "TUTORIAL":
-                            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                                if not slider_hot:
-                                    all_ui = (quiz_buttons + cell_buttons +
-                                              [btn_ready, btn_next, btn_continue, btn_idk, btn_no] +
-                                              free_mode_btns +
-                                              [btn_toggle_origin, btn_toggle_waxis])
-                                    in_hud = (event.pos[1] >= HEIGHT - (FREE_HUD if state == "FREE_MODE" else 300))
-                                    if not any(b.rect.collidepoint(event.pos) for b in all_ui) and not in_hud:
-                                        dragging = True; lastx,lasty = event.pos; drag_start_pos = event.pos
-                                        if state in ("FREE_MODE", "ANALYSIS", "ANSWERING", "FEEDBACK"):
-                                            vp_centre_y = (HEIGHT - 300) // 2
-                                        if axes_shape and hasattr(axes_shape,'ov') and len(axes_shape.ov)>3:
-                                            z_node_screen_y = vp_centre_y - abs(axes_shape.ov[3][1])
-                                            drag_inverted = (event.pos[1] < z_node_screen_y)
-                                        else:
-                                            drag_inverted = (event.pos[1] < vp_centre_y)
+                            if state != "TUTORIAL":
+                                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                                    if not slider_hot:
+                                        all_ui = (quiz_buttons + cell_buttons +
+                                                [btn_ready, btn_next, btn_continue, btn_idk, btn_no] +
+                                                free_mode_btns +
+                                                [btn_toggle_origin, btn_toggle_waxis])
+                                        in_hud = (event.pos[1] >= HEIGHT - (FREE_HUD if state == "FREE_MODE" else 300))
+                                        if not any(b.rect.collidepoint(event.pos) for b in all_ui) and not in_hud:
+                                            dragging = True; lastx,lasty = event.pos; drag_start_pos = event.pos
+                                            if state in ("FREE_MODE", "ANALYSIS", "ANSWERING", "FEEDBACK"):
+                                                vp_centre_y = (HEIGHT - 300) // 2
+                                            if axes_shape and hasattr(axes_shape,'ov') and len(axes_shape.ov)>3:
+                                                z_node_screen_y = vp_centre_y - abs(axes_shape.ov[3][1])
+                                                drag_inverted = (event.pos[1] < z_node_screen_y)
+                                            else:
+                                                drag_inverted = (event.pos[1] < vp_centre_y)
 
-                            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-                                if dragging:
-                                    dragging = False
-                                    mx,my = event.pos
-                                    dist  = math.hypot(mx-drag_start_pos[0], my-drag_start_pos[1])
-                                    omx,omy = mouse_history[0]
-                                    vx = (mx-omx)/(xsens*2.5); vy = (my-omy)/(ysens*2.5)
-                                    if drag_inverted: vx = -vx
-                                    if dist > 15:
-                                        if abs(vx)>abs(vy) and abs(vx)>0.1: dy=vx; dr=0
-                                        elif abs(vy)>0.1: dr=vy; dy=0
+                                elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                                    if dragging:
+                                        dragging = False
+                                        mx,my = event.pos
+                                        dist  = math.hypot(mx-drag_start_pos[0], my-drag_start_pos[1])
+                                        omx,omy = mouse_history[0]
+                                        vx = (mx-omx)/(xsens*2.5); vy = (my-omy)/(ysens*2.5)
+                                        if drag_inverted: vx = -vx
+                                        if dist > 15:
+                                            if abs(vx)>abs(vy) and abs(vx)>0.1: dy=vx; dr=0
+                                            elif abs(vy)>0.1: dr=vy; dy=0
+                                            else: dr=dy=0
                                         else: dr=dy=0
                                     else: dr=dy=0
-                                else: dr=dy=0
 
-                            elif event.type==pygame.MOUSEMOTION and dragging and not slider_hot:
-                                mx,my = event.pos
-                                dx = mx - lastx
-                                if drag_inverted: dx = -dx
-                                yaw  -= dx / xsens
-                                roll -= (my-lasty) / ysens
-                                lastx,lasty = mx,my; dr=dy=0
+                                elif event.type==pygame.MOUSEMOTION and dragging and not slider_hot:
+                                    mx,my = event.pos
+                                    dx = mx - lastx
+                                    if drag_inverted: dx = -dx
+                                    yaw  -= dx / xsens
+                                    roll -= (my-lasty) / ysens
+                                    lastx,lasty = mx,my; dr=dy=0
 
-                            if event.type==pygame.MOUSEWHEEL and state not in ("TUTORIAL",):
-                                if togglescroll:
-                                    sv = -event.y * 3
-                                    if paused:
-                                        for i in range(6):
-                                            dips[i]  = (dips[i]  + sv*a4_variants[i][0]) % 360
-                                            tucks[i] = (tucks[i] + sv*a4_variants[i][1]) % 360
-                                            skews[i] = (skews[i] + sv*a4_variants[i][2]) % 360
-                                    d4 = sv
-                                else:
-                                    if mode=='Wireframe':  ortho = max(0,min(0.005,ortho+event.y*0.0002))
-                                    elif mode=='W-Shells': target_w += event.y*10.0
-                                    elif mode=='CellHl':   opacity = max(0.0,min(1.0,opacity+event.y*0.05))
+                                if event.type==pygame.MOUSEWHEEL and state not in ("TUTORIAL",):
+                                    if togglescroll:
+                                        sv = -event.y * 3
+                                        if paused:
+                                            if state in ("ANALYSIS", "ANSWERING", "FEEDBACK"):
+                                                if all(v is not None for v in a4_variants):
+                                                    for i in range(6):
+                                                        dips[i]  = (dips[i]  + sv*a4_variants[i][0]) % 360
+                                                        tucks[i] = (tucks[i] + sv*a4_variants[i][1]) % 360
+                                                        skews[i] = (skews[i] + sv*a4_variants[i][2]) % 360
+                                            elif state == "FREE_MODE":
+                                                dips[0]  = (dips[0]  + sv*a4_correct[0]) % 360
+                                                tucks[0] = (tucks[0] + sv*a4_correct[1]) % 360
+                                                skews[0] = (skews[0] + sv*a4_correct[2]) % 360
+                                        d4 += sv
+                                    else:
+                                        if mode=='Wireframe':  ortho = max(0,min(0.005,ortho+event.y*0.0002))
+                                        elif mode=='W-Shells': target_w += event.y*10.0
+                                        elif mode=='CellHl':   opacity = max(0.0,min(1.0,opacity+event.y*0.05))
 
-                            if event.type==pygame.KEYDOWN and state not in ("SURVEY","CONSENT","TUTORIAL"):
-                                if event.key==pygame.K_SPACE: paused = not paused
-                                elif event.key==pygame.K_r:
-                                    yaw=pitch=roll=0.0; dy=dr=d4=0.0
-                                    for i in range(6): dips[i]=tucks[i]=skews[i]=0.0
-                                elif event.key==pygame.K_LCTRL: togglescroll=False
-                            elif event.type==pygame.KEYUP:
-                                if event.key==pygame.K_LCTRL: togglescroll=True
+                                if event.type==pygame.KEYDOWN and state not in ("SURVEY","CONSENT","TUTORIAL"):
+                                    if event.key==pygame.K_SPACE: paused = not paused
+                                    elif event.key==pygame.K_r:
+                                        yaw=pitch=roll=0.0; dy=dr=d4=0.0
+                                        for i in range(6): dips[i]=tucks[i]=skews[i]=0.0
+                                    elif event.key==pygame.K_LCTRL: togglescroll=False
+                                elif event.type==pygame.KEYUP:
+                                    if event.key==pygame.K_LCTRL: togglescroll=True
 
                     except Exception as e:
                         log_error(f"Event handling error (frame {frame_count}): {e}")
@@ -1376,7 +1381,6 @@ async def main_async():
                                 dips[i]  = (dips[i]  + d4*a4_variants[i][0]) % 360
                                 tucks[i] = (tucks[i] + d4*a4_variants[i][1]) % 360
                                 skews[i] = (skews[i] + d4*a4_variants[i][2]) % 360
-                        d4 = 0.0
 
                         vp = pygame.Surface((WIDTH, HEIGHT-300)); vp.fill((0,0,0))
                         if active_shape and axes_shape:
@@ -1440,27 +1444,29 @@ async def main_async():
                             dips[0]  = (dips[0]  + d4*a4_correct[0]) % 360
                             tucks[0] = (tucks[0] + d4*a4_correct[1]) % 360
                             skews[0] = (skews[0] + d4*a4_correct[2]) % 360
-                        d4 = 0.0
                         vp_h = HEIGHT - FREE_HUD
                         vp   = pygame.Surface((WIDTH, max(1,vp_h))); vp.fill((0,0,0))
+                        
+                        visible_shapes = [active_shape] + ([axes_shape] if show_three_axis and axes_shape else [])
                         if active_shape and axes_shape:
-                            for sh in main_shapes:
+                            for sh in visible_shapes:
                                 sh.rotate(yaw, 0, roll, dips[0], tucks[0], skews[0])
                                 sh.shrink(ortho if mode=='Wireframe' else 0.001)
                             cellhl = {i for i,b in enumerate(cell_buttons) if b.getsel()}
                             if mode=='Wireframe':  renderers['Wireframe'].render(vp, main_shapes)
                             elif mode=='W-Shells': renderers['W-Shells'].render(vp, main_shapes, target_w)
-                            elif mode=='CellHl':   renderers['CellHl'].render(vp, main_shapes, opacity, cellhl, cell_colors)
+                            elif mode=='CellHl':   renderers['CellHl'].render(vp, visible_shapes, opacity, cellhl, cell_colors)
 
-                        # Optional origin overlay
-                        if show_origin and axes_shape and len(axes_shape.ov) > 0:
+                        # 4D Origin Overlay Window
+                        if show_4d_overlay:
                             osurf = pygame.Surface((140, 140))
                             osurf.fill((0,0,0))
-                            if show_w_axis:
-                                origin_renderer.render(osurf, yaw, 0, roll, dips[0], tucks[0], skews[0], 0.001)
-                            else:
-                                tutorial_origin_renderer.render(osurf, yaw, 0, roll, dips[0], tucks[0], skews[0], 0.001)
-                            vp.blit(osurf, (10, 10))
+                            origin_renderer.render(osurf, yaw, 0, roll, dips[0], tucks[0], skews[0], 0.001)
+                            
+                            # Position indicator in bottom left, above HUD
+                            ox_pos = 10
+                            oy_pos = vp_h - 140 - 10
+                            vp.blit(osurf, (ox_pos, oy_pos))
 
                         screen.blit(vp, (0,0))
                         pygame.draw.line(screen, (80,80,80), (0,vp_h), (WIDTH,vp_h), 2)

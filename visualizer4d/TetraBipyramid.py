@@ -12,8 +12,8 @@ class TetraBipyramid(FourShape):
     # Ordered: +W cells first (top cap), then -W cells (bottom cap)
     # Each cell named by the tetrahedron face it wraps (three vertices of base tet)
     cell_labels = [
-        "+W | face 1", "+W | face 2", "+W | face 3", "+W | face 4",
-        "-W | face 1", "-W | face 2", "-W | face 3", "-W | face 4",
+        "+W Front Face", "+W Left Face", "+W Right Face", "+W Bottom Face",
+        "-W Front Face", "-W Left Face", "-W Right Face", "-W Bottom Face",
     ]
     cell_colors = {
         0: (255,  80,  80),    # +W cap cells — warm reds/oranges
@@ -64,7 +64,11 @@ class TetraBipyramid(FourShape):
             add_edge(i, 5)
 
         def ei(a, b):
-            return edge_idx[(min(a,b), max(a,b))]
+            k = (min(a,b), max(a,b))
+            if k not in edge_idx:
+                edge_idx[k] = len(edge_idx)
+                self.edges.add_link(k)
+            return edge_idx[k]
 
         face_idx = {}
 

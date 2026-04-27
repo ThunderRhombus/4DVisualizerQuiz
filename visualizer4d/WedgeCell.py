@@ -11,20 +11,25 @@ class WedgeCell(FourShape):
              plus 3 equatorial belt cells (one per equatorial edge).
     """
 
-    # Ordered: +W-side cells first, then -W-side, then equatorial belt
     cell_labels = [
-        "+W | upper", "+W | lower",
-        "-W | upper", "-W | lower",
-        "belt A", "belt B", "belt C",
+        "+W Top Front", "+W Top Left", "+W Top Right",
+        "+W Bot Front", "+W Bot Left", "+W Bot Right",
+        "-W Top Front", "-W Top Left", "-W Top Right",
+        "-W Bot Front", "-W Bot Left", "-W Bot Right",
     ]
     cell_colors = {
-        0: (255,  80,  80),   # +W upper — red
-        1: (255, 160,  60),   # +W lower — orange
-        2: ( 80, 140, 255),   # -W upper — blue
-        3: ( 80, 220, 200),   # -W lower — teal
-        4: (160, 255,  80),   # belt A   — lime
-        5: (255, 255,  80),   # belt B   — yellow
-        6: (200,  80, 255),   # belt C   — purple
+        0: (255,  80,  80),
+        1: (255, 100,  80),
+        2: (255, 120,  80),
+        3: (255, 160,  60),
+        4: (255, 180,  60),
+        5: (255, 200,  60),
+        6: ( 80, 140, 255),
+        7: ( 90, 160, 255),
+        8: (100, 180, 255),
+        9: ( 80, 220, 200),
+        10: (90, 230, 210),
+        11: (100, 240, 220),
     }
 
     def __init__(self, size, ortho, ox, oy, oz, ow):
@@ -64,7 +69,11 @@ class WedgeCell(FourShape):
         add_edge(5, 6) # Connect the two W apices
 
         def ei(a, b):
-            return edge_idx[(min(a,b), max(a,b))]
+            k = (min(a,b), max(a,b))
+            if k not in edge_idx:
+                edge_idx[k] = len(edge_idx)
+                self.edges.add_link(k)
+            return edge_idx[k]
 
         face_idx = {}
 
@@ -96,35 +105,26 @@ class WedgeCell(FourShape):
         def fi(a, b, c):
             return face_idx[tuple(sorted([a, b, c]))]
 
-        # Cell 0: upper wedge tetra (0,1,2,3) toward +W
-        self.cells.add_link((
-            fi(0,1,3), fi(1,2,3), fi(2,0,3),
-            fi(0,1,5), fi(1,2,5), fi(2,0,5), fi(0,3,5), fi(1,3,5), fi(2,3,5)
-        ))
-        # Cell 1: lower wedge tetra (0,1,2,4) toward +W
-        self.cells.add_link((
-            fi(0,1,4), fi(1,2,4), fi(2,0,4),
-            fi(0,1,5), fi(1,2,5), fi(2,0,5), fi(0,4,5), fi(1,4,5), fi(2,4,5)
-        ))
-        # Cell 2: upper wedge toward -W
-        self.cells.add_link((
-            fi(0,1,3), fi(1,2,3), fi(2,0,3),
-            fi(0,1,6), fi(1,2,6), fi(2,0,6), fi(0,3,6), fi(1,3,6), fi(2,3,6)
-        ))
-        # Cell 3: lower wedge toward -W
-        self.cells.add_link((
-            fi(0,1,4), fi(1,2,4), fi(2,0,4),
-            fi(0,1,6), fi(1,2,6), fi(2,0,6), fi(0,4,6), fi(1,4,6), fi(2,4,6)
-        ))
-        # Cells 4-6: equatorial belt, one per equatorial edge
+        # Cells: Pyramids from each of the 6 faces of the triangular bipyramid to W-apices
+        # Base Faces: (0,1,3), (1,2,3), (2,0,3) - upper
+        #             (0,1,4), (1,2,4), (2,0,4) - lower
+        
+        # Cells 0-2: +W Upper
         for k in range(3):
             a, b = k, (k+1)%3
-            self.cells.add_link((
-                fi(a, b, 5),
-                fi(a, b, 6),
-                fi(*sorted([a, 5, 6])),
-                fi(*sorted([b, 5, 6])),
-            ))
+            self.cells.add_link((fi(a,b,3), fi(a,b,5), fi(a,3,5), fi(b,3,5)))
+        # Cells 3-5: +W Lower
+        for k in range(3):
+            a, b = k, (k+1)%3
+            self.cells.add_link((fi(a,b,4), fi(a,b,5), fi(a,4,5), fi(b,4,5)))
+        # Cells 6-8: -W Upper
+        for k in range(3):
+            a, b = k, (k+1)%3
+            self.cells.add_link((fi(a,b,3), fi(a,b,6), fi(a,3,6), fi(b,3,6)))
+        # Cells 9-11: -W Lower
+        for k in range(3):
+            a, b = k, (k+1)%3
+            self.cells.add_link((fi(a,b,4), fi(a,b,6), fi(a,4,6), fi(b,4,6)))
 
         for p in self.v:
             self.rv.append(p)

@@ -615,11 +615,17 @@ async def main_async():
                     if togglescroll:
                         sv=-event.y*3
                         if paused:
-                            for i in range(6):
-                                dips[i]=(dips[i]+sv*a4_variants[i][0])%360
-                                tucks[i]=(tucks[i]+sv*a4_variants[i][1])%360
-                                skews[i]=(skews[i]+sv*a4_variants[i][2])%360
-                        d4=sv
+                            if state in ("ANALYSIS", "ANSWERING", "FEEDBACK"):
+                                if all(v is not None for v in a4_variants):
+                                    for i in range(6):
+                                        dips[i]=(dips[i]+sv*a4_variants[i][0])%360
+                                        tucks[i]=(tucks[i]+sv*a4_variants[i][1])%360
+                                        skews[i]=(skews[i]+sv*a4_variants[i][2])%360
+                            elif state == "FREE_MODE":
+                                dips[0]=(dips[0]+sv*a4_correct[0])%360
+                                tucks[0]=(tucks[0]+sv*a4_correct[1])%360
+                                skews[0]=(skews[0]+sv*a4_correct[2])%360
+                        d4+=sv
                     else:
                         if mode=='Wireframe': ortho=max(0,min(0.005,ortho+event.y*0.0002))
                         elif mode=='W-Shells': target_w+=event.y*10.0

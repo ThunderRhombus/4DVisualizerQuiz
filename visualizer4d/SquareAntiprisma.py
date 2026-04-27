@@ -8,25 +8,23 @@ class SquareAntiprisma(FourShape):
     8 antiprism vertices + 2 W-apices = 10 vertices.
     Cells: 2 square-pyramid caps + 8 band tetrahedra (4 per W side).
     """
+    
+    cell_labels = []
+    directions = ["Front", "Front-Right", "Right", "Back-Right", "Back", "Back-Left", "Left", "Front-Left"]
+    cell_labels += ["+W Cap (Z+)", "+W Cap (Z-)"] + [f"+W {d}" for d in directions]
+    cell_labels += ["-W Cap (Z+)", "-W Cap (Z-)"] + [f"-W {d}" for d in directions]
 
-    # Ordered: +W cap, -W cap, then +W band (4), then -W band (4)
-    cell_labels = [
-        "+W cap", "-W cap",
-        "+W band 1", "+W band 2", "+W band 3", "+W band 4",
-        "-W band 1", "-W band 2", "-W band 3", "-W band 4",
-    ]
     cell_colors = {
-        0: (255, 220,  80),   # +W cap  — gold
-        1: ( 80, 160, 255),   # -W cap  — blue
-        2: (255, 120,  80),   # +W band — orange family
-        3: (255, 180,  80),
-        4: (220, 255,  80),
-        5: (140, 255, 100),
-        6: ( 80, 220, 200),   # -W band — teal/purple family
-        7: ( 80, 140, 255),
-        8: (160,  80, 255),
-        9: (220,  80, 200),
+        0: (255, 220,  80),   # +W caps
+        1: (255, 180,  80),
+        2: ( 80, 160, 255),   # -W caps
+        3: (100, 140, 255),
     }
+    # Band colors
+    for i in range(4, 12):
+        cell_colors[i] = (255, 120 + (i-4)*15, 80)
+    for i in range(12, 20):
+        cell_colors[i] = (80, 220, 200 - (i-12)*15)
 
     def __init__(self, size, ortho, ox, oy, oz, ow):
         super().__init__(size, ortho)
@@ -67,23 +65,25 @@ class SquareAntiprisma(FourShape):
             add_edge(i, 9)
 
         def ei(a, b):
-            return edge_idx[(min(a,b), max(a,b))]
+            k = (min(a,b), max(a,b))
+            if k not in edge_idx:
+                edge_idx[k] = len(edge_idx)
+                self.edges.add_link(k)
+            return edge_idx[k]
 
         face_idx = {}
 
-        def add_face(a, b, c):
-            k = tuple(sorted([a, b, c]))
+        def add_face(*v):
+            k = tuple(sorted(v))
             if k not in face_idx:
                 face_idx[k] = len(face_idx)
-                i, j, l = k
-                self.faces.add_link((ei(i,j), ei(i,l), ei(j,l)))
+                edges = []
+                for i in range(len(v)):
+                    edges.append(ei(v[i], v[(i+1)%len(v)]))
+                self.faces.add_link(tuple(edges))
 
-        def add_quad(a, b, c, d):
-            add_face(a, b, c)
-            add_face(a, c, d)
-
-        add_quad(0, 1, 2, 3)
-        add_quad(4, 5, 6, 7)
+        add_face(0, 1, 2, 3)
+        add_face(4, 5, 6, 7)
 
         band_tris = []
         for k in range(4):
@@ -101,41 +101,29 @@ class SquareAntiprisma(FourShape):
                     add_face(i, j, 8)
                     add_face(i, j, 9)
 
-        def fi(a, b, c):
-            return face_idx[tuple(sorted([a, b, c]))]
+        def fi(*v):
+            k = tuple(sorted(v))
+            return face_idx[k]
 
-        top_sq_tris = [(0,1,2),(0,2,3)]
-        bot_sq_tris = [(4,5,6),(4,6,7)]
+        # Cell 0: +W side, Top Square Pyramid
+        self.cells.add_link([fi(0,1,8), fi(1,2,8), fi(2,3,8), fi(3,0,8), fi(0,1,2,3)])
+        # Cell 1: +W side, Bot Square Pyramid
+        self.cells.add_link([fi(4,5,8), fi(5,6,8), fi(6,7,8), fi(7,4,8), fi(4,5,6,7)])
+        
+        # Cell 2: -W side, Top Square Pyramid
+        self.cells.add_link([fi(0,1,9), fi(1,2,9), fi(2,3,9), fi(3,0,9), fi(0,1,2,3)])
+        # Cell 3: -W side, Bot Square Pyramid
+        self.cells.add_link([fi(4,5,9), fi(5,6,9), fi(6,7,9), fi(7,4,9), fi(4,5,6,7)])
 
-        # Cell 0: +W cap (pyramid over top square)
-        cap_p_faces = [fi(*t) for t in top_sq_tris]
-        for k in range(4):
-            cap_p_faces.append(fi(k, (k+1)%4, 8)) 
-        self.cells.add_link(cap_p_faces)
-
-        # Cell 1: -W cap (pyramid over bottom square)
-        cap_m_faces = [fi(*t) for t in bot_sq_tris]
-        for k in range(4):
-            cap_m_faces.append(fi(4+k, 4+(k+1)%4, 9)) 
-        self.cells.add_link(cap_m_faces)
-
-        # Cells 2-5: +W band (pyramid over side quad toward +W apex)
-        for k in range(4):
-            t_up   = (k, (k+1)%4, 4+k)
-            t_down = ((k+1)%4, 4+(k+1)%4, 4+k)
-            self.cells.add_link((
-                fi(*t_up), fi(*t_down), fi(k, (k+1)%4, 8),
-                fi(4+k, 4+(k+1)%4, 8), fi(k, 4+k, 8), fi((k+1)%4, 4+(k+1)%4, 8)
-            ))
-
-        # Cells 6-9: -W band (pyramid over side quad toward -W apex)
-        for k in range(4):
-            t_up   = (k, (k+1)%4, 4+k)
-            t_down = ((k+1)%4, 4+(k+1)%4, 4+k)
-            self.cells.add_link((
-                fi(*t_up), fi(*t_down), fi(k, (k+1)%4, 9),
-                fi(4+k, 4+(k+1)%4, 9), fi(k, 4+k, 9), fi((k+1)%4, 4+(k+1)%4, 9)
-            ))
+        # Cells 4-11: +W side Band (8 tetrahedra)
+        for tri in band_tris:
+            a, b, c = tri
+            self.cells.add_link((fi(a,b,c), fi(a,b,8), fi(b,c,8), fi(a,c,8)))
+            
+        # Cells 12-19: -W side Band (8 tetrahedra)
+        for tri in band_tris:
+            a, b, c = tri
+            self.cells.add_link((fi(a,b,c), fi(a,b,9), fi(b,c,9), fi(a,c,9)))
 
         for p in self.v:
             self.rv.append(p)
