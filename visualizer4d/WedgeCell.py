@@ -62,6 +62,7 @@ class WedgeCell(FourShape):
         for i in range(5):
             add_edge(i, 5)
             add_edge(i, 6)
+        add_edge(5, 6) # Connect the two W apices
 
         def ei(a, b):
             return edge_idx[(min(a,b), max(a,b))]
@@ -79,6 +80,9 @@ class WedgeCell(FourShape):
         for k in range(3):
             add_face(k, (k+1)%3, 3)
             add_face(k, (k+1)%3, 4)
+            # Faces spanning W apices
+            add_face(k, 5, 6)
+        add_face(3, 5, 6); add_face(4, 5, 6)
 
         all_wedge_edges = ([(k,(k+1)%3) for k in range(3)] +
                            [(k,3) for k in range(3)] +
@@ -125,3 +129,4 @@ class WedgeCell(FourShape):
 
         for p in self.v:
             self.rv.append(p)
+            self.ov.append(p)

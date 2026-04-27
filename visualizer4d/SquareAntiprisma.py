@@ -142,3 +142,4 @@ class SquareAntiprisma(FourShape):
 
         for p in self.v:
             self.rv.append(p)
+            self.ov.append(p)
