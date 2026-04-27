@@ -1,5 +1,4 @@
 import pygame
-import numpy as np
 import math as m
 
 class WShellRenderer:
@@ -12,20 +11,36 @@ class WShellRenderer:
 
     def sort_coplanar_vertices(self, verts_3d):
         if len(verts_3d) <= 2: return [i for i in range(len(verts_3d))]
-        c = np.mean(verts_3d, axis=0)
-        v0 = np.array(verts_3d[0]) - c
-        u = v0 / (np.linalg.norm(v0) + 1e-9)
-        v1 = np.array(verts_3d[1]) - c
-        w = v1 - np.dot(v1, u) * u
-        if np.linalg.norm(w) < 1e-5:
-            v1 = np.array(verts_3d[2]) - c
-            w = v1 - np.dot(v1, u) * u
-        w = w / (np.linalg.norm(w) + 1e-9)
+        # Pure Python helpers
+        def mean(pts):
+            return [sum(p[i] for p in pts)/len(pts) for i in range(3)]
+        def dot(v1, v2):
+            return sum(v1[i]*v2[i] for i in range(3))
+        def norm(v):
+            return m.sqrt(dot(v, v))
+        def sub(v1, v2):
+            return [v1[i]-v2[i] for i in range(3)]
+
+        c = mean(verts_3d)
+        v0 = sub(verts_3d[0], c)
+        n0 = norm(v0) + 1e-9
+        u = [v0[i]/n0 for i in range(3)]
+        
+        v1_raw = sub(verts_3d[1], c)
+        d_val = dot(v1_raw, u)
+        w = sub(v1_raw, [u[i]*d_val for i in range(3)])
+        if norm(w) < 1e-5:
+            v1_raw = sub(verts_3d[2], c)
+            d_val = dot(v1_raw, u)
+            w = sub(v1_raw, [u[i]*d_val for i in range(3)])
+        nw = norm(w) + 1e-9
+        w = [w[i]/nw for i in range(3)]
+        
         angles = []
         for p in verts_3d:
-            vec = np.array(p) - c
-            angles.append(m.atan2(np.dot(vec, w), np.dot(vec, u)))
-        return np.argsort(angles)
+            vec = sub(p, c)
+            angles.append(m.atan2(dot(vec, w), dot(vec, u)))
+        return sorted(range(len(angles)), key=lambda i: angles[i])
 
     def get_edge_vertices(self, shape, e_idx):
         verts = [v for v in shape.edges.adj[-e_idx - 1] if v >= 0]

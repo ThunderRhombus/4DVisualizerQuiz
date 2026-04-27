@@ -5,45 +5,48 @@ from FourShape import FourShape
 
 class Tesseract(FourShape):
 
-    cell_labels = ["-w", "+w", "-z", "-y", "+x", "+y", "-x", "+z"]
+    # Ordered: ±W faces first (innermost/outermost in 4D), then ±X, ±Y, ±Z
+    cell_labels = ["-W", "+W", "-X", "+X", "-Y", "+Y", "-Z", "+Z"]
     cell_colors = {
-        0: (150, 150, 0),
-        1: (255, 255, 100),
-        2: (0, 0, 150),
-        3: (0, 150, 0),
-        4: (255, 100, 100),
-        5: (100, 255, 100),
-        6: (150, 0, 0),
-        7: (100, 100, 255),
+        0: (150, 150,   0),   # -W  dark yellow
+        1: (255, 255, 100),   # +W  bright yellow
+        2: (150,   0,   0),   # -X  dark red
+        3: (255, 100, 100),   # +X  bright red
+        4: (  0, 150,   0),   # -Y  dark green
+        5: (100, 255, 100),   # +Y  bright green
+        6: (  0,   0, 150),   # -Z  dark blue
+        7: (100, 100, 255),   # +Z  bright blue
     }
 
     def __init__(self, size, ortho, ox, oy, oz, ow):
         super().__init__(size, ortho)
-        self.v = [    (-size + ox, -size + oy, -size + oz, -size + ow),
-                    (size + ox, -size + oy, -size + oz, -size + ow),
-                    (size + ox, size + oy, -size + oz, -size + ow),
-                    (-size + ox, size + oy, -size + oz, -size + ow),
-                    (-size + ox, -size + oy, size + oz, -size + ow),
-                    (size + ox, -size + oy, size + oz, -size + ow),
-                    (size + ox, size + oy, size + oz, -size + ow),
-                    (-size + ox, size + oy, size + oz, -size + ow),
-                    (-size + ox, -size + oy, -size + oz, size + ow),
-                    (size + ox, -size + oy, -size + oz, size + ow),
-                    (size + ox, size + oy, -size + oz, size + ow),
-                    (-size + ox, size + oy, -size + oz, size + ow),
-                    (-size + ox, -size + oy, size + oz, size + ow),
-                    (size + ox, -size + oy, size + oz, size + ow),
-                    (size + ox, size + oy, size + oz, size + ow),
-                    (-size + ox, size + oy, size + oz, size + ow)]    
-    
-        self.edges.add_link((0, 1)) ##0
-        self.edges.add_link((1, 2)) ##1
-        self.edges.add_link((2, 3)) ##2
+        self.v = [
+            (-size+ox, -size+oy, -size+oz, -size+ow),
+            ( size+ox, -size+oy, -size+oz, -size+ow),
+            ( size+ox,  size+oy, -size+oz, -size+ow),
+            (-size+ox,  size+oy, -size+oz, -size+ow),
+            (-size+ox, -size+oy,  size+oz, -size+ow),
+            ( size+ox, -size+oy,  size+oz, -size+ow),
+            ( size+ox,  size+oy,  size+oz, -size+ow),
+            (-size+ox,  size+oy,  size+oz, -size+ow),
+            (-size+ox, -size+oy, -size+oz,  size+ow),
+            ( size+ox, -size+oy, -size+oz,  size+ow),
+            ( size+ox,  size+oy, -size+oz,  size+ow),
+            (-size+ox,  size+oy, -size+oz,  size+ow),
+            (-size+ox, -size+oy,  size+oz,  size+ow),
+            ( size+ox, -size+oy,  size+oz,  size+ow),
+            ( size+ox,  size+oy,  size+oz,  size+ow),
+            (-size+ox,  size+oy,  size+oz,  size+ow),
+        ]
+
+        self.edges.add_link((0, 1))
+        self.edges.add_link((1, 2))
+        self.edges.add_link((2, 3))
         self.edges.add_link((3, 0))
         self.edges.add_link((4, 5))
         self.edges.add_link((5, 6))
         self.edges.add_link((6, 7))
-        self.edges.add_link((7, 4)) 
+        self.edges.add_link((7, 4))
         self.edges.add_link((0, 4))
         self.edges.add_link((1, 5))
         self.edges.add_link((2, 6))
@@ -61,7 +64,7 @@ class Tesseract(FourShape):
         self.edges.add_link((9, 13))
         self.edges.add_link((10, 14))
         self.edges.add_link((11, 15))
-        
+
         self.edges.add_link((0, 8))
         self.edges.add_link((1, 9))
         self.edges.add_link((2, 10))
@@ -98,14 +101,15 @@ class Tesseract(FourShape):
         self.faces.add_link((6, 30, 31, 18))
         self.faces.add_link((7, 31, 28, 19))
 
-        self.cells.add_link((0, 1, 2, 3, 4, 5))       ## 0  -w
-        self.cells.add_link((6, 7, 8, 9, 10, 11))      ## 1  +w
-        self.cells.add_link((0, 6, 12, 13, 14, 15))    ## 2  -z
-        self.cells.add_link((1, 7, 12, 16, 17, 20))    ## 3  -y
-        self.cells.add_link((2, 8, 13, 17, 18, 21))    ## 4  +x
-        self.cells.add_link((3, 9, 14, 18, 19, 22))    ## 5  +y
-        self.cells.add_link((4, 10, 15, 19, 16, 23))   ## 6  -x
-        self.cells.add_link((5, 20, 21, 22, 23, 11))   ## 7  +z
+        # Cells ordered: -W, +W, -X, +X, -Y, +Y, -Z, +Z
+        self.cells.add_link((0, 1, 2, 3, 4, 5))        # 0  -W  (w = -size cube)
+        self.cells.add_link((6, 7, 8, 9, 10, 11))       # 1  +W  (w = +size cube)
+        self.cells.add_link((4, 10, 15, 19, 16, 23))    # 2  -X
+        self.cells.add_link((2, 8, 13, 17, 18, 21))     # 3  +X
+        self.cells.add_link((1, 7, 12, 16, 17, 20))     # 4  -Y
+        self.cells.add_link((3, 9, 14, 18, 19, 22))     # 5  +Y
+        self.cells.add_link((0, 6, 12, 13, 14, 15))     # 6  -Z
+        self.cells.add_link((5, 20, 21, 22, 23, 11))    # 7  +Z
 
         for p in self.v:
             self.rv.append(p)

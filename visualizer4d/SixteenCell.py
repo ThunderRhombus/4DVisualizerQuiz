@@ -4,57 +4,55 @@ from FourShape import FourShape
 
 class SixteenCell(FourShape):
     """
-    The 16-cell (hexadecachoron).
-    The 4D cross-polytope — dual of the tesseract.
+    The 16-cell (hexadecachoron) — dual of the tesseract.
     8 vertices (±1 on each axis), 24 edges, 32 triangular faces, 16 tetrahedral cells.
-    Every vertex connects to every other vertex EXCEPT its antipode.
-
-    Cells are named by the octant they point into (+/- xyz combination),
-    since each tetrahedral cell occupies one of the 16 hyperoctants.
+    Each tetrahedral cell occupies one hyperoctant.
+    Labels reflect the signs of the three non-W axes in that octant,
+    grouped by W sign: +W cells first, then -W cells.
     """
 
+    # 16 cells = 8 +W-side octants + 8 -W-side octants
+    # Label format: (W sign)(X sign)(Y sign)(Z sign)
     cell_labels = [
-        "+++", "++-", "+-+", "+--",
-        "-++", "-+-", "--+", "---",
-        "w+++", "w++-", "w+-+", "w+--",
-        "w-++", "w-+-", "w--+", "w---",
+        "+W+X+Y", "+W+X-Y", "+W-X+Y", "+W-X-Y",
+        "+W+X+Z", "+W+X-Z", "+W-X+Z", "+W-X-Z",
+        "-W+X+Y", "-W+X-Y", "-W-X+Y", "-W-X-Y",
+        "-W+X+Z", "-W+X-Z", "-W-X+Z", "-W-X-Z",
     ]
     cell_colors = {
         0:  (255,  80,  80),
-        1:  ( 80, 255,  80),
-        2:  ( 80,  80, 255),
-        3:  (255, 255,  80),
-        4:  (255,  80, 255),
-        5:  ( 80, 255, 255),
-        6:  (200, 120,  80),
-        7:  ( 80, 200, 120),
-        8:  (120,  80, 200),
-        9:  (200, 200,  80),
-        10: ( 80, 200, 200),
-        11: (200,  80, 200),
-        12: (160, 160,  80),
-        13: ( 80, 160, 160),
-        14: (160,  80, 160),
-        15: (200, 200, 200),
+        1:  (255, 160,  80),
+        2:  (200, 255,  80),
+        3:  ( 80, 255,  80),
+        4:  ( 80, 255, 200),
+        5:  ( 80, 200, 255),
+        6:  ( 80,  80, 255),
+        7:  (160,  80, 255),
+        8:  (200,  60,  60),
+        9:  (200, 120,  60),
+        10: (160, 200,  60),
+        11: ( 60, 200,  60),
+        12: ( 60, 200, 160),
+        13: ( 60, 160, 200),
+        14: ( 60,  60, 200),
+        15: (120,  60, 200),
     }
 
     def __init__(self, size, ortho, ox, oy, oz, ow):
         super().__init__(size, ortho)
 
         s = size
-        # 8 vertices: one positive and one negative on each of the 4 axes
         self.v = [
-            ( s+ox,    oy,    oz,    ow),   # 0  +x
-            (-s+ox,    oy,    oz,    ow),   # 1  -x
-            (   ox,  s+oy,    oz,    ow),   # 2  +y
-            (   ox, -s+oy,    oz,    ow),   # 3  -y
-            (   ox,    oy,  s+oz,    ow),   # 4  +z
-            (   ox,    oy, -s+oz,    ow),   # 5  -z
-            (   ox,    oy,    oz,  s+ow),   # 6  +w
-            (   ox,    oy,    oz, -s+ow),   # 7  -w
+            ( s+ox,    oy,    oz,    ow),   # 0  +X
+            (-s+ox,    oy,    oz,    ow),   # 1  -X
+            (   ox,  s+oy,    oz,    ow),   # 2  +Y
+            (   ox, -s+oy,    oz,    ow),   # 3  -Y
+            (   ox,    oy,  s+oz,    ow),   # 4  +Z
+            (   ox,    oy, -s+oz,    ow),   # 5  -Z
+            (   ox,    oy,    oz,  s+ow),   # 6  +W
+            (   ox,    oy,    oz, -s+ow),   # 7  -W
         ]
 
-        # Antipodal pairs: (0,1), (2,3), (4,5), (6,7)
         antipodes = {0:1, 1:0, 2:3, 3:2, 4:5, 5:4, 6:7, 7:6}
         edge_set = []
         edge_idx = {}
@@ -65,7 +63,6 @@ class SixteenCell(FourShape):
                     edge_set.append((i,j))
                     self.edges.add_link((i, j))
 
-        # 32 triangular faces — every triangle whose 3 vertices are mutually non-antipodal
         face_set = []
         face_idx = {}
         for i in range(8):
@@ -80,7 +77,6 @@ class SixteenCell(FourShape):
                     def ei(a, b): return edge_idx[(min(a,b), max(a,b))]
                     self.faces.add_link((ei(i,j), ei(i,k), ei(j,k)))
 
-        # 16 tetrahedral cells — every set of 4 mutually non-antipodal vertices
         def fi(a, b, c): return face_idx[tuple(sorted([a, b, c]))]
 
         for i in range(8):

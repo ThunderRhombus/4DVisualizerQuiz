@@ -1,5 +1,4 @@
 import math as m
-import numpy
 from Graph import Graph
 from FourShape import FourShape
 
