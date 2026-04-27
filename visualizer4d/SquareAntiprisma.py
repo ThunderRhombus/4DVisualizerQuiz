@@ -1,5 +1,4 @@
 import math as m
-import numpy
 from Graph import Graph
 from FourShape import FourShape
 
@@ -111,35 +110,32 @@ class SquareAntiprisma(FourShape):
         # Cell 0: +W cap (pyramid over top square)
         cap_p_faces = [fi(*t) for t in top_sq_tris]
         for k in range(4):
-            cap_p_faces.append(fi(k, (k+1)%4, 8))
+            cap_p_faces.append(fi(k, (k+1)%4, 8)) 
         self.cells.add_link(cap_p_faces)
 
         # Cell 1: -W cap (pyramid over bottom square)
         cap_m_faces = [fi(*t) for t in bot_sq_tris]
         for k in range(4):
-            cap_m_faces.append(fi(4+k, 4+(k+1)%4, 9))
+            cap_m_faces.append(fi(4+k, 4+(k+1)%4, 9)) 
         self.cells.add_link(cap_m_faces)
 
-        # Cells 2-5: +W band (each pair of band triangles toward +W apex)
+        # Cells 2-5: +W band (pyramid over side quad toward +W apex)
         for k in range(4):
             t_up   = (k, (k+1)%4, 4+k)
             t_down = ((k+1)%4, 4+(k+1)%4, 4+k)
             self.cells.add_link((
-                fi(*t_up), fi(*t_down),
-                fi(k, (k+1)%4, 8),
-                fi(4+k, 4+(k+1)%4, 8),
+                fi(*t_up), fi(*t_down), fi(k, (k+1)%4, 8),
+                fi(4+k, 4+(k+1)%4, 8), fi(k, 4+k, 8), fi((k+1)%4, 4+(k+1)%4, 8)
             ))
 
-        # Cells 6-9: -W band (same pairs toward -W apex)
+        # Cells 6-9: -W band (pyramid over side quad toward -W apex)
         for k in range(4):
             t_up   = (k, (k+1)%4, 4+k)
             t_down = ((k+1)%4, 4+(k+1)%4, 4+k)
             self.cells.add_link((
-                fi(*t_up), fi(*t_down),
-                fi(k, (k+1)%4, 9),
-                fi(4+k, 4+(k+1)%4, 9),
+                fi(*t_up), fi(*t_down), fi(k, (k+1)%4, 9),
+                fi(4+k, 4+(k+1)%4, 9), fi(k, 4+k, 9), fi((k+1)%4, 4+(k+1)%4, 9)
             ))
 
         for p in self.v:
             self.rv.append(p)
-            self.ov.append(p)

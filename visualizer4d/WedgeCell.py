@@ -1,5 +1,4 @@
 import math as m
-import numpy
 from Graph import Graph
 from FourShape import FourShape
 
@@ -99,23 +98,23 @@ class WedgeCell(FourShape):
 
         # Cell 0: upper wedge tetra (0,1,2,3) toward +W
         self.cells.add_link((
-            fi(0,1,2), fi(0,1,3), fi(0,2,3), fi(1,2,3),
-            fi(0,1,5), fi(0,2,5), fi(1,2,5),
+            fi(0,1,3), fi(1,2,3), fi(2,0,3),
+            fi(0,1,5), fi(1,2,5), fi(2,0,5), fi(0,3,5), fi(1,3,5), fi(2,3,5)
         ))
         # Cell 1: lower wedge tetra (0,1,2,4) toward +W
         self.cells.add_link((
-            fi(0,1,2), fi(0,1,4), fi(0,2,4), fi(1,2,4),
-            fi(0,1,5), fi(0,2,5), fi(1,2,5),
+            fi(0,1,4), fi(1,2,4), fi(2,0,4),
+            fi(0,1,5), fi(1,2,5), fi(2,0,5), fi(0,4,5), fi(1,4,5), fi(2,4,5)
         ))
         # Cell 2: upper wedge toward -W
         self.cells.add_link((
-            fi(0,1,2), fi(0,1,3), fi(0,2,3), fi(1,2,3),
-            fi(0,1,6), fi(0,2,6), fi(1,2,6),
+            fi(0,1,3), fi(1,2,3), fi(2,0,3),
+            fi(0,1,6), fi(1,2,6), fi(2,0,6), fi(0,3,6), fi(1,3,6), fi(2,3,6)
         ))
         # Cell 3: lower wedge toward -W
         self.cells.add_link((
-            fi(0,1,2), fi(0,1,4), fi(0,2,4), fi(1,2,4),
-            fi(0,1,6), fi(0,2,6), fi(1,2,6),
+            fi(0,1,4), fi(1,2,4), fi(2,0,4),
+            fi(0,1,6), fi(1,2,6), fi(2,0,6), fi(0,4,6), fi(1,4,6), fi(2,4,6)
         ))
         # Cells 4-6: equatorial belt, one per equatorial edge
         for k in range(3):
@@ -129,4 +128,3 @@ class WedgeCell(FourShape):
 
         for p in self.v:
             self.rv.append(p)
-            self.ov.append(p)

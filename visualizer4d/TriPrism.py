@@ -1,5 +1,4 @@
 import math as m
-import numpy
 from Graph import Graph
 from FourShape import FourShape
 
@@ -57,51 +56,45 @@ class TriPrism(FourShape):
                 self.edges.add_link((k[0], k[1]))
 
         def ei(a, b):
-            return edge_idx[(min(a,b), max(a,b))]
-
-        tri_faces   = [(0,1,2), (3,4,5)]
-        rect_tris   = [
-            (0,1,4),(0,3,4),
-            (1,2,5),(1,4,5),
-            (2,0,3),(2,5,3),
-        ]
-        susp_tris   = [(a,b,6) for a,b in prism_edges] + [(a,b,7) for a,b in prism_edges]
+            try:
+                return edge_idx[(min(a,b), max(a,b))]
+            except KeyError:
+                # If we need a diagonal for a face, we must add it as an edge
+                k = (min(a,b), max(a,b))
+                edge_idx[k] = len(edge_idx)
+                self.edges.add_link(k)
+                return edge_idx[k]
 
         face_idx = {}
-        for tri_v in tri_faces + rect_tris + susp_tris:
-            k = tuple(sorted(tri_v))
+        def add_face(verts):
+            k = tuple(sorted(verts))
             if k not in face_idx:
                 face_idx[k] = len(face_idx)
-                i, j, l = k
-                self.faces.add_link((ei(i,j), ei(i,l), ei(j,l)))
+                edges = []
+                for i in range(len(verts)):
+                    edges.append(ei(verts[i], verts[(i+1)%len(verts)]))
+                self.faces.add_link(tuple(edges))
 
-        def fi(a, b, c):
-            return face_idx[tuple(sorted([a, b, c]))]
+        # Base triangles
+        add_face((0, 1, 2)); add_face((3, 4, 5))
+        # Side rectangles
+        add_face((0, 1, 4, 3)); add_face((1, 2, 5, 4)); add_face((2, 0, 3, 5))
+        # Suspension triangles
+        for a, b in prism_edges:
+            add_face((a, b, 6)); add_face((a, b, 7))
 
-        def apex_cell(apex):
-            faces_in = [fi(a, b, apex) for a, b in prism_edges]
-            faces_in.append(fi(0, 1, 2))
-            faces_in.append(fi(3, 4, 5))
-            return faces_in
+        def fi(*v): return face_idx[tuple(sorted(v))]
 
-        # Cells ordered: +W cap, -W cap, then three walls
-        self.cells.add_link(apex_cell(6))   # 0  +W cap
-        self.cells.add_link(apex_cell(7))   # 1  -W cap
-
-        rect_bands = [
-            ((0,1,4,3), [(0,1),(1,4),(4,3),(3,0)]),
-            ((1,2,5,4), [(1,2),(2,5),(5,4),(4,1)]),
-            ((2,0,3,5), [(2,0),(0,3),(3,5),(5,2)]),
-        ]
-        for _, band_edges in rect_bands:
-            faces_in = []
-            for a, b in band_edges:
-                faces_in.append(fi(a, b, 6))
-                faces_in.append(fi(a, b, 7))
-            faces_in.append(fi(0, 1, 2))
-            faces_in.append(fi(3, 4, 5))
-            self.cells.add_link(faces_in)   # 2, 3, 4
+        # Cells
+        # Cell 0 & 1: Dipyramids over the triangular bases
+        self.cells.add_link([fi(0,1,6), fi(1,2,6), fi(2,0,6), fi(0,1,7), fi(1,2,7), fi(2,0,7)])
+        self.cells.add_link([fi(3,4,6), fi(4,5,6), fi(5,3,6), fi(3,4,7), fi(4,5,7), fi(5,3,7)])
+        
+        # Walls: Dipyramids over the rectangular side faces
+        walls = [(0,1,4,3), (1,2,5,4), (2,0,3,5)]
+        for w_v in walls:
+            edges = [(w_v[i], w_v[(i+1)%4]) for i in range(4)]
+            self.cells.add_link([fi(a,b,6) for a,b in edges] + [fi(a,b,7) for a,b in edges])
 
         for p in self.v:
             self.rv.append(p)
-            self.ov.append(p)

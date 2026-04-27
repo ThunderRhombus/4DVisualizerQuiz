@@ -1,5 +1,4 @@
 import math as m
-import numpy
 from Graph import Graph
 from FourShape import FourShape
 
@@ -94,4 +93,3 @@ class TetraBipyramid(FourShape):
 
         for p in self.v:
             self.rv.append(p)
-            self.ov.append(p)

@@ -689,13 +689,13 @@ async def main_async():
                 b.rect.x = bx; b.rect.y = hud_top
                 bx += b.rect.width + 6
 
-            shape_dropdown.x = 90
-            shape_dropdown.y = hud_top + 38
+            shape_dropdown.x = 450
+            shape_dropdown.y = hud_top - 240
 
             btn_toggle_origin.rect.x = shape_dropdown.x + shape_dropdown.w + 12
-            btn_toggle_origin.rect.y = hud_top + 38
+            btn_toggle_origin.rect.y = shape_dropdown.y
             btn_toggle_waxis.rect.x  = btn_toggle_origin.rect.right + 8
-            btn_toggle_waxis.rect.y  = hud_top + 38
+            btn_toggle_waxis.rect.y  = shape_dropdown.y
 
             slider_x = WIDTH // 2 + 20
             row_h    = 44
@@ -1104,10 +1104,10 @@ async def main_async():
                                               [btn_ready, btn_next, btn_continue, btn_idk, btn_no] +
                                               free_mode_btns +
                                               [btn_toggle_origin, btn_toggle_waxis])
-                                    in_hud = (state == "FREE_MODE" and event.pos[1] >= HEIGHT-FREE_HUD)
+                                    in_hud = (event.pos[1] >= HEIGHT - (FREE_HUD if state == "FREE_MODE" else 300))
                                     if not any(b.rect.collidepoint(event.pos) for b in all_ui) and not in_hud:
                                         dragging = True; lastx,lasty = event.pos; drag_start_pos = event.pos
-                                        if state == "FREE_MODE":
+                                        if state in ("FREE_MODE", "ANALYSIS", "ANSWERING", "FEEDBACK"):
                                             vp_centre_y = (HEIGHT - 300) // 2
                                         if axes_shape and hasattr(axes_shape,'ov') and len(axes_shape.ov)>3:
                                             z_node_screen_y = vp_centre_y - abs(axes_shape.ov[3][1])
