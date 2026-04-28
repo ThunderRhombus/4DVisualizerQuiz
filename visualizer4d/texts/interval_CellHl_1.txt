@@ -1,1 +1,9 @@
-b
+This initial supplement is just here to help you understand what the controls do to some extent. If you don’t quite grasp 4D yet, that’s perfectly fine and partially intended. Don’t be discouraged, and please keep responding in good faith!
+
+In this model, you can select the “cells” on these 4D objects corresponding to the faces on a 3D object. Each of these cells move about in the fourth dimension, moving in and out and switching back and forth. Both short term and long term behavior can help you here.
+
+You can click the buttons on the right to show and hide specific cells to track throughout the rotation, and you can change the opacity (Ctrl + Scroll) to keep track of multiple cells at once.
+
+The question is asking you to describe the 4D rotations of this object, so keep track of how the shape changes over time, paying special attention to the initial position of the cells (R to reset) and how they move away from that position (Space to pause, Neutral scroll to rotate in 4D).
+
+Take your time analyzing before moving on to the answer.

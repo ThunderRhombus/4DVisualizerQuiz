@@ -1,1 +1,9 @@
-2
+This initial supplement is just here to help you understand what the controls do to some extent. If you don’t quite grasp 4D yet, that’s perfectly fine and partially intended. Don’t be discouraged, and please keep responding in good faith!
+
+In this model, you can see the slice of each 4D object that is present in the w-coordinate you are targeting. Neighboring slices of higher w coordinate are more red, and slices of lower w coordinate are more blue.
+
+You can adjust the targeted w (Ctrl + Scroll) to observe the whole shape of the 4D object from end to end.
+
+The question is asking you to describe the 4D rotations of this object, so keep track of how the shape changes over time, paying special attention to how the object sits initially (R to reset) and how the shape’s profile changes from end to end as it moves in the fourth dimension (Space to pause, Neutral scroll to rotate in 4D).
+
+Take your time analyzing before moving on to the answer.

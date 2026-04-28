@@ -1,4 +1,3 @@
-
 This initial supplement is just here to help you understand what the controls do to some extent. If you don’t quite grasp 4D yet, that’s perfectly fine and partially intended. Don’t be discouraged, and please keep responding in good faith!
 
 In this model, the fourth dimension coordinate (w to the normal x, y, and z) is reflected in the deformation of the normal x, y, and z coordinates, and in the coloring of the lines.

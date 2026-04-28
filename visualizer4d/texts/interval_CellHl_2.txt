@@ -1,1 +1,19 @@
-c
+Please try your best to absorb as much as you can here, and remember you are being timed.
+
+This site is attempting to depict objects living in a 4D Euclidean Space. This 4D isn’t three dimensions of space and one of time, the context you’ll usually encounter 4D in. Instead, this is a space where, instead of just having three coordinates for a location, x, y, and z, you additionally need a w to encode where something is. This w behaves just like the others, following basic geometry like the Pythagorean theorem for length, i.e., if you move the end of a line segment into the 4th dimension, it gets shorter in the other 3 dimensions.
+
+To help better understand the jump from 3D to 4D, imagine a normal 3D object, like a cube. This object has faces, and each of these faces is 2D. If you tried projecting all these faces together, you’d get a shadow of a cube. A shadow that could be a square of a rectangular prism, a hexagon of another shape. However, if you color these faces, this ambiguity vanishes almost instantly. 
+
+The weakness of projecting faces is that you lose information on depth. But if you’re able to rotate the object freely, and select each face individually, you can find the angle at which depth is not a factor. There is always one such angle because the faces are in 2D. This way, if you know that a 3D cube’s faces are all squares, if you see a projection where the three squares become rhombuses, you’ll know exactly how those faces rotated.
+
+This level of information carries on when talking about the 3D cells of a 4D object as well. This model gives you no information on w, except with the slight pushing out of points with a positive w, so that points with similar xyz and different w can be differentiated. However, by finding how a cell looks initially, how it looks at its apex and how it transforms as you rotate, you can get full information on how that shape behaves. 
+
+While we cannot literally see a fourth dimension of space, looking at the specific cells of a 4D object forgoes the need to see in the fourth dimension. Because with enough cells, the way they transform can only imply a specific 4D transformation.
+
+(PLEASE DON’T SKIP THIS. I LIKE LITERALLY GIVE YOU THE TRICK HERE)
+
+The question is asking you to describe the 4D rotations of each object. Your most useful tool in this model is looking at how w-oriented cells change their location when moving away from the starting position, where certain cells are at their apex. Additionally, despite how the shape transforms, cells oriented on the w-axis will always stay on the object’s w-axis, allowing you to find the position of the w-axis and, therefore, the answer. 
+
+It’s much easier to orient yourself in the short term when the x, y, and z in the answer options have not similarly moved. For less complex rotations, it may also help to highlight some cells and see how they take each other’s places, and keep track of the name to find out what’s happening geometrically.
+
+Take your time analyzing before moving on to the answer.

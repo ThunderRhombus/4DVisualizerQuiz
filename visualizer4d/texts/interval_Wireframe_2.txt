@@ -1,1 +1,21 @@
-3
+Please try your best to absorb as much as you can here, and remember you are being timed.
+
+This site is attempting to depict objects living in a 4D Euclidean Space. This 4D isn’t three dimensions of space and one of time, the context you’ll usually encounter 4D in. Instead, this is a space where, instead of just having three coordinates for a location, x, y, and z, you additionally need a w to encode where something is. This w behaves just like the others, following basic geometry like the Pythagorean theorem for length, i.e., if you move the end of a line segment into the 4th dimension, it gets shorter in the other 3 dimensions.
+
+To help better understand the jump from 3D to 4D, imagine a normal 3D object, like a cube. When projecting a 3D object on a screen, you’re technically reducing it to 2D. However, most rendering systems that attempt to depict 3D objects do so pretty clearly.
+
+This is because of two things. Most rendering systems often use perspective in some way. Objects that are closer appear bigger, and further objects appear smaller. But by knowing how something looks at different distances, your mind can compensate for the deformation and turn it into depth.
+
+The second thing our brain can use is shadows. Depending on where a light source is and how it behaves, lighting across an object is inconsistent in a way that tells you about depth. If the light is behind you, things that appear brighter may appear closer, things that are darker, farther.
+
+These technically aren’t unambiguous. When you think you’re looking at a cube on a screen, you are actually looking at a weirdly deformed hexagon with strangely shaded rhombus sections. However, the impression it leaves on you is that of a full-blown, 3D Cube.
+
+Similarly, while we cannot literally see a fourth dimension of space, it can be substituted in the same way. Brightness can be traded away for depth, like we see in the real world. But if you additionally trade away another dimension like color, you can depict all four dimensions you are trying to. X, y, z, and w can be encoded in x, y, brightness, and color instead, giving you the same amount of information as if you were looking at a 4D shape itself.
+
+(PLEASE DON’T SKIP THIS. I LIKE LITERALLY GIVE YOU THE TRICK HERE)
+
+The question is asking you to describe the 4D rotations of each object. Your most useful tool in this model is looking at how w-oriented cells change their location when moving away from the starting position, where certain cells are at their apex. Additionally, despite how the shape transforms, cells oriented on the w-axis will always stay on the object’s w-axis, allowing you to find the position of the w-axis and, therefore, the answer. 
+
+It’s much easier to orient yourself in the short term when the x, y, and z in the answer options have not similarly moved. For less complex rotations, it may also help to highlight some cells and see how they take each other’s places, and keep track of the name to find out what’s happening geometrically.
+
+Take your time analyzing before moving on to the answer.

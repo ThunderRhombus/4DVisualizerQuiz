@@ -1,1 +1,15 @@
-3
+Please try your best to absorb as much as you can here, and remember you are being timed.
+
+This site is attempting to depict objects living in a 4D Euclidean Space. This 4D isn’t three dimensions of space and one of time, the context you’ll usually encounter 4D in. Instead, this is a space where, instead of just having three coordinates for a location, x, y, and z, you additionally need a w to encode where something is. This w behaves just like the others, following basic geometry like the Pythagorean theorem for length, i.e., if you move the end of a line segment into the 4th dimension, it gets shorter in the other 3 dimensions.
+
+To help better understand the jump from 3D to 4D, imagine a normal 3D cube for a second. If you take the cross-section of the cube at any coordinate, say z = 0, you get a thin 2D slice. Depending on how you move the cube up and down across that cross-section, and how you rotate it, this slice could become a triangle, or even a hexagon. In this model, you’ve likely seen something similar, with cross-sections lengthening and facetting in strange ways. These slices do not appear to capture their parent shape, just like a hexagon doesn’t quite give the impression of a cube.
+
+However, just like in the jump from 2D to 3D, your most valuable tool for turning these slices into a shape is by moving the shape fully through your slice, or changing your slicing target to cover the whole shape. A hexagon by itself won’t feel like a cube, but by targeting different slices, you can see a point become a triangle become a hexagon become another triangle become a point. 
+
+While we cannot literally see a fourth dimension of space, pausing the object’s rotation and scanning the object from end to end will give you the same amount of information as actually seeing it, because you are using your time scanning to effectively substitute for the fourth dimension.
+
+(PLEASE DON’T SKIP THIS. I LIKE LITERALLY GIVE YOU THE TRICK HERE)
+
+The question is asking you to describe the 4D rotations of each object. Your most useful tool in this model is looking at lines parallel to the w-axis, and tracking the direction in which the shell moves along them. Lines that are parallel to the w-axis initially appear like points in 3D, so by finding those “points” that become lines as soon as the object rotates in 4D, you can track which direction the w-axis is pointed in. Remember that angle and keep track of it relative to x, y, and z to find the answer.
+
+Take your time analyzing before moving on to the answer.

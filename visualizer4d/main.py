@@ -627,6 +627,124 @@ class RadioGroup:
 
 
 # ============================================================
+# Interstitial text renderer — handles long wrapped paragraphs with scrolling
+# ============================================================
+def _wrap_text(text, font, max_width):
+    """Word-wrap a single line of text to fit within max_width pixels."""
+    words = text.split()
+    lines = []
+    current = []
+    for word in words:
+        test = " ".join(current + [word])
+        if font.size(test)[0] <= max_width:
+            current.append(word)
+        else:
+            if current:
+                lines.append(" ".join(current))
+            current = [word]
+    if current:
+        lines.append(" ".join(current))
+    return lines if lines else [""]
+
+
+def render_interstitial_text(screen, text, font, big_font, small_font,
+                              WIDTH, HEIGHT, btn_continue, scroll_offset=0):
+    """
+    Render the interstitial screen with scrolling support.
+    The Continue button is always pinned at the bottom of the screen.
+    A scrollbar and hint appear when content overflows.
+    Returns max_scroll so the caller can clamp scroll_offset.
+    """
+    MAX_W = min(WIDTH - 120, 860)
+    COL_X = WIDTH // 2 - MAX_W // 2
+    TOP_PAD = 40
+    BTN_H   = btn_continue.rect.height + 32   # reserved strip at bottom for button
+    VIEWPORT_H = HEIGHT - BTN_H               # scrollable viewport height
+
+    LINE_H_BIG   = big_font.get_height() + 4
+    LINE_H_BODY  = font.get_height() + 3
+    PARA_GAP     = 14
+
+    paragraphs = text.split('\n')
+    rendered_lines = []
+
+    for pi, para in enumerate(paragraphs):
+        para_strip = para.strip()
+        if not para_strip:
+            rendered_lines.append(None)
+            continue
+        use_big   = (pi == 0)
+        use_small = para.startswith("  ") or para.startswith("\t")
+        f   = big_font if use_big else (small_font if use_small else font)
+        col = (255, 230, 80) if use_big else ((170, 200, 255) if use_small else (200, 200, 220))
+        wrapped = _wrap_text(para_strip, f, MAX_W)
+        for li, line in enumerate(wrapped):
+            surf = f.render(line, True, col)
+            rendered_lines.append((surf, use_big, li == 0 and pi > 0))
+
+    # Measure total content height
+    total_h = TOP_PAD
+    for entry in rendered_lines:
+        if entry is None:
+            total_h += PARA_GAP
+        else:
+            _, use_big, new_para = entry
+            if new_para:
+                total_h += PARA_GAP // 2
+            total_h += LINE_H_BIG if use_big else LINE_H_BODY
+    total_h += 20  # bottom padding
+
+    # Build an off-screen surface for the full content
+    content_surf = pygame.Surface((WIDTH, max(total_h, VIEWPORT_H)))
+    content_surf.fill((5, 5, 5))
+
+    y = TOP_PAD
+    for entry in rendered_lines:
+        if entry is None:
+            y += PARA_GAP
+            continue
+        surf, use_big, new_para = entry
+        if new_para:
+            y += PARA_GAP // 2
+        lh = LINE_H_BIG if use_big else LINE_H_BODY
+        content_surf.blit(surf, (COL_X + MAX_W // 2 - surf.get_width() // 2, y))
+        y += lh
+
+    # Clamp scroll_offset
+    max_scroll = max(0, total_h - VIEWPORT_H)
+    scroll_offset = max(0, min(scroll_offset, max_scroll))
+
+    # Blit the visible viewport slice onto the screen
+    screen.blit(content_surf, (0, 0), (0, scroll_offset, WIDTH, VIEWPORT_H))
+
+
+    # Continue button — always pinned to the bottom strip
+    btn_continue.rect.topleft = (WIDTH // 2 - btn_continue.rect.width // 2, HEIGHT - BTN_H + 8)
+    btn_continue.draw(screen, font)
+
+
+    # Draw scrollbar when content overflows
+    if max_scroll > 0:
+        track_h = VIEWPORT_H - 20
+        thumb_h = max(30, int(track_h * VIEWPORT_H / total_h))
+        thumb_y = int((scroll_offset / max_scroll) * (track_h - thumb_h)) + 10
+        pygame.draw.rect(screen, (60, 60, 80),   (WIDTH - 12, 10, 6, track_h), border_radius=3)
+        pygame.draw.rect(screen, (140, 160, 220), (WIDTH - 12, thumb_y, 6, thumb_h), border_radius=3)
+
+        # "scroll for more" hint when not yet at the bottom
+        if scroll_offset < max_scroll - 10:
+            hint = small_font.render("scroll for more", True, (200, 200, 100))
+            # Draw a subtle background strip so hint is readable over any text
+            hint_rect = hint.get_rect(centerx=WIDTH // 2, y=VIEWPORT_H - hint.get_height() + 40)
+            bg_rect = hint_rect.inflate(20, 6)
+            bg_surf = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
+            bg_surf.fill((5, 5, 5, 180))
+            screen.blit(bg_surf, bg_rect.topleft)
+            screen.blit(hint, hint_rect)
+    return max_scroll  # caller uses this to clamp its stored scroll_offset
+
+
+# ============================================================
 # Main
 # ============================================================
 async def main_async():
@@ -679,8 +797,9 @@ async def main_async():
 
 
 
-        interstitial_text = None
-        state         = "CONSENT"
+        interstitial_text   = None
+        interstitial_scroll = 0          # ← NEW: tracks scroll position for interstitials
+        state               = "CONSENT"
 
         td = TimingData()
 
@@ -757,12 +876,13 @@ async def main_async():
         frame_count   = 0
 
         FREE_HUD = 170
-        SLIDER_W = 220
+        SLIDER_W = 160
 
+        # --- Free mode sliders: default XW=0.5, YW=0.0, ZW=0.0 ---
         sliders = [
-            Slider(0,0,SLIDER_W,"XW",-0.30,0.30,0.10),
-            Slider(0,0,SLIDER_W,"YW",-0.30,0.30,0.05),
-            Slider(0,0,SLIDER_W,"ZW",-0.30,0.30,0.02),
+            Slider(0,0,SLIDER_W,"XW",-1.0,1.0,0.5),
+            Slider(0,0,SLIDER_W,"YW",-1.0,1.0,0.0),
+            Slider(0,0,SLIDER_W,"ZW",-1.0,1.0,0.0),
         ]
         def slider_a4(): return tuple(s.value for s in sliders)
 
@@ -795,6 +915,9 @@ async def main_async():
             ToggleButton(0,0,108,28,"WShells", (80,180,120)),
             ToggleButton(0,0,108,28,"CellHl",   (180,120,80)),
         ]
+        # "Set to 0" button for sliders
+        btn_sliders_zero = ToggleButton(0,0,80,24,"Set → 0",(100,100,160))
+
         shape_dropdown    = Dropdown(0,0,160,28,SHAPE_NAMES,SHAPE_COLS)
         btn_toggle_origin = ToggleButton(0,0,125,28,"ThreeAxis: ON",(80,120,160))
         btn_toggle_waxis  = ToggleButton(0,0,125,28,"4D Origin: ON",(80,160,120))
@@ -855,6 +978,10 @@ async def main_async():
                 s.x = slider_x
                 s.y = hud_top + i * row_h + row_h // 2
                 s.w = min(SLIDER_W, WIDTH - slider_x - 340)
+            # "Set → 0" button sits to the right of the last slider value label
+            last_s = sliders[-1]
+            btn_sliders_zero.rect.x = last_s.x + last_s.w + 56
+            btn_sliders_zero.rect.y = hud_top + row_h + (row_h // 2) - btn_sliders_zero.rect.height // 2
 
         def update_free_sel():
             for i,b in enumerate(free_mode_btns): b.selected=(FREE_MODES[i]==mode)
@@ -906,7 +1033,7 @@ async def main_async():
             nonlocal state,dips,tucks,skews,a4_correct
             state="FREE_MODE"
             dips[0]=tucks[0]=skews[0]=0.0
-            sliders[0].value=0.10; sliders[1].value=0.05; sliders[2].value=0.02
+            sliders[0].value=0.5; sliders[1].value=0.0; sliders[2].value=0.0
             a4_correct=slider_a4(); rebuild_free_shape(); update_free_sel()
 
         def enter_tutorial():
@@ -1095,7 +1222,9 @@ async def main_async():
                             elif tutorial_sub=="ANSWER" and tutorial_answered:
                                 btn_tutorial_next.handle_event(event)
                                 if btn_tutorial_next.selected:
-                                    btn_tutorial_next.selected=False; state="INTERSTITIAL"; interstitial_text=None
+                                    btn_tutorial_next.selected=False
+                                    state="INTERSTITIAL"; interstitial_text=None
+                                    interstitial_scroll = 0   # ← reset scroll on enter
 
                         # ---- INTERSTITIAL ----
                         elif state=="INTERSTITIAL":
@@ -1104,6 +1233,10 @@ async def main_async():
                                 btn_continue.selected=False
                                 td.end_read()
                                 setup_question()
+                            # Scroll wheel moves the text
+                            if event.type == pygame.MOUSEWHEEL:
+                                interstitial_scroll = max(0, interstitial_scroll - event.y * 30)
+                                ev_consumed = True
 
                         # ---- ANALYSIS ----
                         elif state=="ANALYSIS":
@@ -1150,6 +1283,7 @@ async def main_async():
                                     enter_free(from_quiz=True)
                                 elif question_index%5==0:
                                     state="INTERSTITIAL"; interstitial_text=None
+                                    interstitial_scroll = 0   # ← reset scroll on enter
                                     ri=question_index//5-1
                                     if ri<len(td.readtime): td.start_read(ri)
                                 else:
@@ -1158,6 +1292,13 @@ async def main_async():
                         # ---- FREE MODE ----
                         elif state=="FREE_MODE":
                             ev_consumed=any(s.handle_event(event) for s in sliders)
+                            # "Set → 0" button
+                            if not ev_consumed:
+                                btn_sliders_zero.handle_event(event)
+                                if btn_sliders_zero.selected:
+                                    btn_sliders_zero.selected=False
+                                    for s in sliders: s.value=0.0
+                                    ev_consumed=True
 
                         # Shared free-mode controls
                         if state=="FREE_MODE" and not ev_consumed:
@@ -1249,7 +1390,7 @@ async def main_async():
                                 yaw+=dx/xsens; roll+=(my-lasty)/ysens
                                 lastx,lasty=mx,my; dr=dy=0
 
-                            if event.type==pygame.MOUSEWHEEL and state not in ("TUTORIAL",):
+                            if event.type==pygame.MOUSEWHEEL and state not in ("TUTORIAL","INTERSTITIAL"):
                                 if togglescroll:
                                     sv=-event.y*3
                                     if paused:
@@ -1269,7 +1410,7 @@ async def main_async():
                                     elif mode=='WShells': target_w+=event.y*10.0
                                     elif mode=='CellHl':   opacity=max(0.0,min(1.0,opacity+event.y*0.05))
 
-                            if event.type==pygame.KEYDOWN and state not in ("SURVEY","CONSENT","TUTORIAL"):
+                            if event.type==pygame.KEYDOWN and state not in ("SURVEY","CONSENT","TUTORIAL","INTERSTITIAL"):
                                 if event.key==pygame.K_SPACE: paused=not paused
                                 elif event.key==pygame.K_r:
                                     yaw=pitch=roll=0.0; dy=dr=d4=0.0
@@ -1421,7 +1562,6 @@ async def main_async():
 
                     # ---- INTERSTITIAL ----
                     elif state=="INTERSTITIAL":
-                        layout_quiz()
                         if interstitial_text is None:
                             block_idx=question_index//5
                             try:
@@ -1435,11 +1575,10 @@ async def main_async():
                                       "Analyse each shape's 4D rotation before guessing.\n\n"
                                       "Click Continue when ready.")
 
-                        y_pos=HEIGHT//2-100
-                        for line in interstitial_text.split('\n'):
-                            s=big_font.render(line,True,(255,255,255))
-                            screen.blit(s,(WIDTH//2-s.get_width()//2,y_pos)); y_pos+=44
-                        btn_continue.draw(screen,font)
+                        max_scroll = render_interstitial_text(
+                            screen, interstitial_text, font, big_font,
+                            small_font, WIDTH, HEIGHT, btn_continue, interstitial_scroll)
+                        interstitial_scroll = min(interstitial_scroll, max_scroll)
 
                     # ---- QUIZ STATES ----
                     elif state in ("ANALYSIS","ANSWERING","FEEDBACK"):
@@ -1534,6 +1673,7 @@ async def main_async():
                         sh_lbl=small_font.render("4D Spin  (drag handles or click track)",True,(200,200,255))
                         screen.blit(sh_lbl,(sliders[0].x-10,hud_top+2))
                         for s in sliders: s.draw(screen,small_font)
+                        btn_sliders_zero.draw(screen,small_font)
 
                         ctrl_str=("4D Zoom" if mode=='Wireframe' else "Transparency" if mode=='CellHl' else "4D Slicing")
                         hints=["DRAG viewport: Rotate 3D  |  SPACE: Pause  |  R: Reset",
