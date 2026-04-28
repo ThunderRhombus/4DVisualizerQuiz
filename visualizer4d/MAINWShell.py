@@ -9,9 +9,11 @@ class WShellRenderer:
         self.a4 = a4
         self.font = pygame.font.SysFont(None, 24)
 
+    def _sx(self, x): return self.WIDTH  // 2 + round(x)
+    def _sy(self, y): return self.HEIGHT // 2 - round(y)   # Y-flip: up is positive
+
     def sort_coplanar_vertices(self, verts_3d):
         if len(verts_3d) <= 2: return [i for i in range(len(verts_3d))]
-        # Pure Python helpers
         def mean(pts):
             return [sum(p[i] for p in pts)/len(pts) for i in range(3)]
         def dot(v1, v2):
@@ -69,8 +71,8 @@ class WShellRenderer:
                 
                 draw_list.append({
                     'z': avg_z,
-                    'p1': (self.WIDTH//2 + round(p1[0]), self.HEIGHT//2 + round(p1[1])),
-                    'p2': (self.WIDTH//2 + round(p2[0]), self.HEIGHT//2 + round(p2[1])),
+                    'p1': (self._sx(p1[0]), self._sy(p1[1])),
+                    'p2': (self._sx(p2[0]), self._sy(p2[1])),
                     'color_main': color,
                     'thickness': 2,
                     'type': 'global'
@@ -137,19 +139,18 @@ class WShellRenderer:
                         g_c = max(0, min(255, int(g_val)))
                         
                         alpha = int(255 * opacity_factor * 0.8) 
-                    
-                        # Add a special highlight border for the central 'target' shell
                         is_target = (shell_offset == 0)
                         
                         draw_list.append({
                             'z': avg_z,
                             'type': 'poly',
-                            'pts': [(self.WIDTH//2 + round(unique_pts[i][0]), self.HEIGHT//2 + round(unique_pts[i][1])) for i in sorted_idx],
+                            'pts': [(self._sx(unique_pts[i][0]), self._sy(unique_pts[i][1])) for i in sorted_idx],
                             'color_main': (r, g_c, b, alpha),
                             'is_target': is_target,
-                            'color_target': (255, 255, 200, 255) # Bright golden highlight
+                            'color_target': (255, 255, 200, 255)
                         })
-        # 2. Collect Labels into the draw_list for Z-sorting
+
+        # 3. Labels
         final_text = []
         for shape in shapes:
             if getattr(shape, 'hastext', False):
@@ -158,8 +159,8 @@ class WShellRenderer:
                     if text:
                         z = shape.ov[p][2]
                         w = shape.ov[p][3]
-                        sx = self.WIDTH//2 + round(shape.ov[p][0])
-                        sy = self.HEIGHT//2 + round(shape.ov[p][1])
+                        sx = self._sx(shape.ov[p][0])
+                        sy = self._sy(shape.ov[p][1])
                         
                         g_val = 127 + round(z * self.tuning)
                         d_val = round((w + w) * self.tuning)
@@ -179,7 +180,6 @@ class WShellRenderer:
         
         for item in draw_list:
             if item['type'] == 'global':
-                # ... (line drawing)
                 p1, p2 = item['p1'], item['p2']
                 min_x, max_x = min(p1[0], p2[0]) - 5, max(p1[0], p2[0]) + 5
                 min_y, max_y = min(p1[1], p2[1]) - 5, max(p1[1], p2[1]) + 5
@@ -207,10 +207,10 @@ class WShellRenderer:
             elif item['type'] == 'circle':
                 pygame.draw.circle(screen, item['color'], item['pos'], 10)
 
-        # Draw Labels on TOP
         for lbl in final_text:
             text_surf = self.font.render(lbl['text'], True, (255, 255, 255))
             screen.blit(text_surf, (lbl['pos'][0] - text_surf.get_width()//2, lbl['pos'][1] - text_surf.get_height()//2))
+
 
 def main(a4=(0.1, 0.0, 0.0)):
     from Tesseract import Tesseract
@@ -285,7 +285,6 @@ def main(a4=(0.1, 0.0, 0.0)):
             tuck = (tuck + d4 * a4[1]) % 360
             skew = (skew + d4 * a4[2]) % 360
 
-        
         for shape in shapes:
             shape.rotate(yaw, pitch, roll, dip, tuck, skew)
             shape.shrink(ortho)

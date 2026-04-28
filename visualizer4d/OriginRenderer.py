@@ -10,8 +10,11 @@ class OriginRenderer:
         self.font = pygame.font.SysFont(None, 20)
         self.tuning = 0.2
 
+    def _sx(self, surface, x): return surface.get_width()  // 2 + round(x)
+    def _sy(self, surface, y): return surface.get_height() // 2 - round(y)  # Y-flip: up is positive
+
     def render(self, surface, yaw, pitch, roll, dip, tuck, skew, ortho):
-        w_mid = surface.get_width() // 2
+        w_mid = surface.get_width()  // 2
         h_mid = surface.get_height() // 2
         surface.fill((15, 15, 15))
         pygame.draw.rect(surface, (60, 60, 60), surface.get_rect(), 1)
@@ -26,10 +29,9 @@ class OriginRenderer:
                 if len(n) == 2:
                     p1 = self.axis.ov[n[0]]
                     p2 = self.axis.ov[n[1]]
-                    c = (80, 80, 80)
-                    pygame.draw.line(surface, c, 
-                        (w_mid + round(p1[0]), h_mid + round(p1[1])),
-                        (w_mid + round(p2[0]), h_mid + round(p2[1])), 1)
+                    pygame.draw.line(surface, (80, 80, 80), 
+                        (self._sx(surface, p1[0]), self._sy(surface, p1[1])),
+                        (self._sx(surface, p2[0]), self._sy(surface, p2[1])), 1)
 
         # Draw dimensional nodes and labels
         for p in range(len(self.axis.ov)):
@@ -45,15 +47,15 @@ class OriginRenderer:
                 b_c = max(0, min(255, int(g_val - d_val)))
                 g_c = max(0, min(255, int(g_val)))
                 
-                sx = w_mid + round(self.axis.ov[p][0])
-                sy = h_mid + round(self.axis.ov[p][1])
+                sx = self._sx(surface, self.axis.ov[p][0])
+                sy = self._sy(surface, self.axis.ov[p][1])
                 
                 pygame.draw.circle(surface, (r_c, g_c, b_c), (sx, sy), 6)
                 text_surf = self.font.render(text, True, (200, 200, 200))
                 surface.blit(text_surf, (sx-4, sy-4))
 
+
 def main():
-    # Standalone test
     pygame.init()
     screen = pygame.display.set_mode((300, 300))
     renderer = OriginRenderer(300, 300)

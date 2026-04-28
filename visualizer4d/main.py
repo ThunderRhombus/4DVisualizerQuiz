@@ -10,6 +10,12 @@ import traceback
 import urllib.parse
 import time
 import math
+import os
+
+# pygbag seeds random with a fixed value at startup, so we re-seed from OS
+# entropy immediately.  time.time_ns() gives nanosecond precision which is
+# different every run even if the wall clock looks the same.
+random.seed(os.urandom(16))
 
 print("STARTING MAIN.PY", flush=True)
 print(f"Python version: {sys.version}", flush=True)
@@ -90,6 +96,25 @@ if _FAILED_IMPORTS:
     async def main_async():
         await _show_error()
 
+def get_tutorial_angles(M_deg,Sp_deg,Sr_deg):
+    M,Sp,Sr=math.radians(M_deg),math.radians(Sp_deg),math.radians(Sr_deg)
+    r11=math.cos(M)*math.cos(Sp)
+    r12=math.cos(M)*math.sin(Sp)*math.sin(Sr)-math.sin(M)*math.cos(Sr)
+    r13=math.cos(M)*math.sin(Sp)*math.cos(Sr)+math.sin(M)*math.sin(Sr)
+    r21=math.sin(M)*math.cos(Sp)
+    r23=math.sin(M)*math.sin(Sp)*math.cos(Sr)-math.cos(M)*math.sin(Sr)
+    r33=math.cos(Sp)*math.cos(Sr)
+    p_rad=math.asin(max(-1.0,min(1.0,r13)))
+    cp=math.cos(p_rad)
+    if abs(cp)>1e-6:
+        r_rad=math.atan2(-r23,r33)
+        y_rad=math.atan2(-r12,r11)
+    else:
+        r_rad=0; y_rad=math.atan2(r21,math.cos(math.radians(Sp_deg))*math.cos(Sr))
+    return math.degrees(y_rad),math.degrees(p_rad),math.degrees(r_rad)
+
+
+
 
 TOTAL_QUIZ_QUESTIONS = 15
 
@@ -99,11 +124,6 @@ def log_error(msg):  print(f"[4D-ERROR] {msg}", file=sys.stderr)
 
 # ============================================================
 # Google Form
-# HOW TO FIND ENTRY IDs:
-#   1. Open your form → three-dot menu → "Get pre-filled link"
-#   2. Fill a dummy value in every field → "Get link"
-#   3. The URL contains ?entry.XXXXXXXXX=value for each field
-#   4. Replace every REPLACE_* below with the real entry IDs
 # ============================================================
 FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfXKygh8Wsv-MU_2u0bjt1eaExFICsbKm7SO-3a4s4O26NUPA/formResponse"
 
@@ -146,6 +166,56 @@ ENTRY_CHOICE  = [
     "entry.1014351439", "entry.1714729522", "entry.1678345719", "entry.1045166073",
     "entry.279914678",  "entry.175768213",  "entry.2018112989",
 ]
+
+# ============================================================
+# Google Apps Script URL for balancing counts
+# ============================================================
+BALANCING_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxn36iA-c-LsH8PXuRkAFV8-igNRG2XxAekVFVSSZxNkGSkDsjDQfpGg9_VB8ApdU9vNA/exec"
+
+
+def _is_valid_balancing_url(url):
+    return (
+        isinstance(url, str)
+        and url
+        and url != "REPLACE_WITH_YOUR_APPS_SCRIPT_EXEC_URL"
+        and "/macros/s/" in url
+        and url.endswith("/exec")
+    )
+
+
+def _parse_balancing_mode(text):
+    """
+    Accepts either:
+        label,label,W_count,S_count,C_count
+    or:
+        W_count,S_count,C_count
+
+    The JSONP callback delivers the value via JSON.stringify on the JS side,
+    so the string Python receives may be wrapped in surrounding double-quotes
+    (e.g. '"counts,counts,0,1,1"').  Strip those before splitting.
+
+    Returns: mode with the lowest count.
+    """
+    # Strip whitespace then any surrounding JS-string quotes added by JSON.stringify
+    line = text.strip().strip('"\'').splitlines()[0].strip().strip('"\'')
+    parts = [p.strip().strip('"\'') for p in line.split(",")]
+    log_debug(f"Balancing CSV parts: {parts}")
+
+    if len(parts) >= 5:
+        w_cnt, s_cnt, c_cnt = int(parts[2]), int(parts[3]), int(parts[4])
+    elif len(parts) >= 3:
+        w_cnt, s_cnt, c_cnt = int(parts[0]), int(parts[1]), int(parts[2])
+    else:
+        raise ValueError(f"Expected 3 or 5+ CSV fields, got {len(parts)}: {parts}")
+
+    counts = sorted([
+        (w_cnt, "Wireframe"),
+        (s_cnt, "WShells"),
+        (c_cnt, "CellHl"),
+    ])
+    chosen = counts[0][1]
+    log_debug(f"Balancing success: W={w_cnt}, S={s_cnt}, C={c_cnt} -> {chosen}")
+    return chosen
 
 
 # ============================================================
@@ -204,7 +274,6 @@ class TimingData:
                 self.readtime[ri] = round(time.time() - self._read_start, 2)
 
     def record_answer(self, qi, chosen_label, is_correct, is_idk, shape_name="", a4_variants=None, correct_idx=None):
-        # options encodes question context: shape + all 5 presented a4 tuples + which was correct
         if a4_variants:
             variants_str = "|".join(
                 f"O{i}:({v[0]:.3f},{v[1]:.3f},{v[2]:.3f})" for i, v in enumerate(a4_variants[1:], 1)
@@ -220,40 +289,137 @@ class TimingData:
 
 
 # ============================================================
-# Google Form submission helpers
+# Network helpers
 # ============================================================
+
 async def _post_form(data: dict):
-    if any("REPLACE_" in k for k in data.keys()):
-        log_debug("Form entry IDs not configured – skipping submission.")
-        return
+    """
+    Submit to Google Forms.
+
+    Browser/pygbag:
+        Uses a real hidden HTML form POST into a hidden iframe. This avoids
+        CORS/no-cors opacity issues and behaves like a normal Google Form submit.
+
+    Desktop:
+        Uses urllib in a background daemon thread so pygame does not freeze.
+    """
     try:
-        if sys.platform == 'emscripten':
-            import js
-            from pyodide.ffi import to_js
-            opts = {
-                "method": "POST", "mode": "no-cors",
-                "headers": {"Content-Type": "application/x-www-form-urlencoded"},
-                "body": urllib.parse.urlencode(data),
-            }
-            js.fetch(FORM_URL, to_js(opts))
-        else:
-            import urllib.request, threading
-            enc = urllib.parse.urlencode(data).encode('utf-8')
-            req = urllib.request.Request(FORM_URL, data=enc)
-            def _send():
-                try: urllib.request.urlopen(req, timeout=5)
-                except Exception as e: log_error(f"Form submit error: {e}")
-            threading.Thread(target=_send, daemon=True).start()
+        if sys.platform == "emscripten":
+            from js import document, window
+            import json
+
+            iframe_id = "apps_script_form_iframe"
+            iframe = document.getElementById(iframe_id)
+            if iframe is None:
+                iframe = document.createElement("iframe")
+                iframe.name = iframe_id
+                iframe.id = iframe_id
+                iframe.style.display = "none"
+                document.body.appendChild(iframe)
+
+            form = document.createElement("form")
+            form.method = "POST"
+            form.action = BALANCING_SCRIPT_URL
+            form.target = iframe_id
+            form.style.display = "none"
+
+            inp = document.createElement("input")
+            inp.type = "hidden"
+            inp.name = "payload"
+            inp.value = json.dumps(data)
+            form.appendChild(inp)
+
+            document.body.appendChild(form)
+            form.submit()
+            window.setTimeout(lambda: form.remove(), 3000)
+            log_debug(f"Submitted form payload to Apps Script with {len(data)} fields.")
+            return
+
+
+        import urllib.request, threading
+        body = urllib.parse.urlencode(data).encode("utf-8")
+        req = urllib.request.Request(
+            FORM_URL,
+            data=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+        def _send():
+            try:
+                urllib.request.urlopen(req, timeout=5)
+                log_debug(f"Google Form submitted via urllib with {len(data)} fields.")
+            except Exception as e:
+                log_error(f"Form submit error desktop: {e}")
+
+        threading.Thread(target=_send, daemon=True).start()
     except Exception as e:
         log_error(f"Failed to submit form: {e}")
+        traceback.print_exc()
+
+
+async def _fetch_balancing_text():
+    if not _is_valid_balancing_url(BALANCING_SCRIPT_URL):
+        log_debug("Balancing URL invalid; using random fallback.")
+        return None
+
+    try:
+        stamp = str(int(time.time() * 1000))
+        sep = "&" if "?" in BALANCING_SCRIPT_URL else "?"
+        url = BALANCING_SCRIPT_URL + sep + "action=assign&_=" + stamp
+
+        if sys.platform == "emscripten":
+            from js import window
+
+            result_key = "__balance_result_" + stamp
+
+            # Use JS fetch() — reliable in pygbag, unlike JSONP polling.
+            # Apps Script redirects GET requests, so we need redirect:'follow'.
+            # Result is stored in a global so Python can poll for it.
+            window.eval(f"""
+                window["{result_key}"] = "";
+                fetch("{url}", {{redirect: "follow"}})
+                    .then(function(r) {{ return r.text(); }})
+                    .then(function(t) {{ window["{result_key}"] = t || "__EMPTY__"; }})
+                    .catch(function(e) {{ window["{result_key}"] = "__FETCH_ERROR__"; }});
+            """)
+
+            for _ in range(80):  # up to 8 seconds
+                raw = str(window.eval(f'window["{result_key}"] || ""'))
+                if raw:
+                    log_debug(f"Balancing fetch result: {raw[:200]}")
+                    if raw in ("__FETCH_ERROR__", "__EMPTY__"):
+                        return None
+                    return raw
+                await asyncio.sleep(0.1)
+
+            log_debug("Balancing fetch timed out.")
+            return None
+
+        import urllib.request
+        with urllib.request.urlopen(url, timeout=5) as r:
+            text = r.read().decode("utf-8")
+
+        log_debug(f"Balancing GET body desktop: {text[:200]}")
+        return text
+
+    except Exception as e:
+        log_debug(f"Balancing GET failed: {e}")
+        traceback.print_exc()
+        return None
+
 
 
 async def submit_survey(td: TimingData, origin: str, familiarity: int):
-    await _post_form({ENTRY_ORIGIN: origin, ENTRY_FAMILIARITY: str(familiarity)})
+    """Early partial submission right after the survey screen."""
+    await _post_form({
+        ENTRY_ORIGIN:      origin,
+        ENTRY_FAMILIARITY: str(familiarity),
+        ENTRY_PRETIME:     str(td.pretime),
+    })
 
 
 async def submit_full_session(td: TimingData, model: str,
-                               origin: str, familiarity: int, user_id: int):
+                               origin: str, familiarity: int):
     data = {
         ENTRY_ORIGIN:      origin,
         ENTRY_FAMILIARITY: str(familiarity),
@@ -286,25 +452,26 @@ class TutorialOriginRenderer(OriginRenderer):
             if v < 0:
                 n = list(self.axis.edges.adj[v])
                 if len(n) == 2:
-                    p1 = self.axis.ov[n[0]]; p2 = self.axis.ov[n[1]]
-                    pygame.draw.line(surface, (80,80,80),
-                        (self.WIDTH//2+round(p1[0]), self.HEIGHT//2+round(p1[1])),
-                        (self.WIDTH//2+round(p2[0]), self.HEIGHT//2+round(p2[1])), 1)
+                    p1 = self.axis.ov[n[0]]
+                    p2 = self.axis.ov[n[1]]
+                    pygame.draw.line(surface, (80, 80, 80),
+                        (self._sx(surface, p1[0]), self._sy(surface, p1[1])),
+                        (self._sx(surface, p2[0]), self._sy(surface, p2[1])), 1)
         for p in range(len(self.axis.ov)):
             text = self.axis.getText(p)
             if text and text.lower() != 'w':
-                z = self.axis.ov[p][2]; w = self.axis.ov[p][3]
+                z = self.axis.ov[p][2]
+                w = self.axis.ov[p][3]
                 g_val = 127 + round(z * self.tuning)
                 d_val = round((w+w) * self.tuning)
                 r_c = max(0, min(255, int(g_val + d_val)))
                 b_c = max(0, min(255, int(g_val - d_val)))
                 g_c = max(0, min(255, int(g_val)))
-                sx = self.WIDTH//2 + round(self.axis.ov[p][0])
-                sy = self.HEIGHT//2 + round(self.axis.ov[p][1])
+                sx = self._sx(surface, self.axis.ov[p][0])
+                sy = self._sy(surface, self.axis.ov[p][1])
                 pygame.draw.circle(surface, (r_c, g_c, b_c), (sx, sy), 6)
-                text_surf = self.font.render(text, True, (200,200,200))
+                text_surf = self.font.render(text, True, (200, 200, 200))
                 surface.blit(text_surf, (sx-3, sy-6))
-
 
 # ============================================================
 # Draggable Slider
@@ -481,73 +648,47 @@ async def main_async():
         # ------------------------------------------------------------------
         # Session
         # ------------------------------------------------------------------
-        user_id = random.randint(10000, 99999)  # Unique session ID
-        assigned_mode = "CellHl"  # Default fallback
-        
-        # Background task to fetch balancing counts from spreadsheet (non-blocking)
+        user_id = None  # removed - not used
+        assigned_mode = "CellHl"
+        mode = assigned_mode
+
         async def fetch_balancing_counts():
-            """Background task to fetch balancing counts from spreadsheet."""
+            """
+            Try to assign the least-used mode from Apps Script.
+            If anything fails, fall back to random so the game always starts.
+            """
             nonlocal assigned_mode, mode
             try:
-                if sys.platform == 'emscripten':
-                    import js
-                    BALANCING_URL = "https://docs.google.com/spreadsheets/d/1aDEtjzNG4zhUMsXh9k98M5nmLQAA96tAxrOQ60wC2lY/export?format=csv&gid=65633586"
-                    resp = await js.fetch(BALANCING_URL)
-                    if resp.ok:
-                        text = await resp.text()
-                        lines = text.strip().split('\n')
-                        if lines:
-                            first_line = lines[0]
-                            # Parse CSV: handle quoted and unquoted values
-                            parts = [p.strip().strip('"\'') for p in first_line.split(',')]
-                            log_debug(f"Sheet raw line: {first_line}")
-                            log_debug(f"Sheet parsed: {parts}")
-                            
-                            if len(parts) >= 5:
-                                try:
-                                    w_cnt = int(parts[2])
-                                    s_cnt = int(parts[3])
-                                    c_cnt = int(parts[4])
-                                    counts = [(w_cnt, 'Wireframe'), (s_cnt, 'W-Shells'), (c_cnt, 'CellHl')]
-                                    counts.sort(key=lambda x: x[0])
-                                    new_mode = counts[0][1]
-                                    # Update mode immediately (happens during startup)
-                                    assigned_mode = new_mode
-                                    mode = new_mode
-                                    log_debug(f"Balancing fetched: W={w_cnt}, S={s_cnt}, C={c_cnt} → assigned {new_mode}")
-                                except (ValueError, IndexError) as e:
-                                    log_debug(f"Could not parse counts: {e}, using random")
-                                    assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
-                                    mode = assigned_mode
-                    else:
-                        log_debug(f"Fetch failed with status {resp.status}, using random")
-                        assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
-                        mode = assigned_mode
-                else:
-                    # Local desktop: use truly random (no seed)
-                    assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
-                    mode = assigned_mode
-                    log_debug(f"Local mode (random): {assigned_mode}")
+                print("[4D-BALANCE] starting balancing fetch", flush=True)
+                text = await _fetch_balancing_text()
+
+                if not text:
+                    assigned_mode = mode = random.choice(["Wireframe", "WShells", "CellHl"])
+                    log_debug(f"Balancing unavailable; random fallback -> {mode}")
+                    return
+
+                assigned_mode = mode = _parse_balancing_mode(text)
+                print(f"[4D-BALANCE] balancing text returned: {text}", flush=True)
+
             except Exception as e:
-                log_debug(f"Balancing fetch background task failed: {e}")
-                assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
-                mode = assigned_mode
-        
-        # Fire off the background fetch task immediately (non-blocking)
+                log_debug(f"Balancing failed: {e}")
+                traceback.print_exc()
+                assigned_mode = mode = random.choice(["Wireframe", "WShells", "CellHl"])
+
         balancing_task = asyncio.create_task(fetch_balancing_counts())
-        
+
+
+
+        interstitial_text = None
         state         = "CONSENT"
 
-        # Timing
         td = TimingData()
 
-        # Survey results (needed for final submit)
         survey_origin          = ""
         survey_familiarity_val = 1
         survey_source          = None
         survey_familiarity     = None
 
-        # Tutorial state
         tutorial_sub           = "WATCH"
         tutorial_angle         = 0.0
         tutorial_paused        = False
@@ -583,15 +724,15 @@ async def main_async():
         togglescroll   = True
         ortho          = 0.001
 
-        show_three_axis = True   # ThreeAxis overlay inside viewport
-        show_4d_overlay = True   # OriginRenderer corner window
+        show_three_axis = True
+        show_4d_overlay = True
 
         free_shape_idx = 0
         read_counter   = 0
 
         renderers = {
             'Wireframe': WireframeRenderer(WIDTH, HEIGHT-300, a4=a4_correct),
-            'W-Shells':  WShellRenderer  (WIDTH, HEIGHT-300, a4=a4_correct),
+            'WShells':  WShellRenderer  (WIDTH, HEIGHT-300, a4=a4_correct),
             'CellHl':    CellHlRenderer  (WIDTH, HEIGHT-300, a4=a4_correct),
             'Tutorial':  TutorialRenderer(WIDTH, HEIGHT-300),
         }
@@ -604,7 +745,7 @@ async def main_async():
             0:(120,80,200),1:(200,80,120),2:(80,200,200),
             3:(200,150,80),4:(80,180,120),5:(150,120,200),6:(180,80,80)
         }
-        FREE_MODES = ['Wireframe','W-Shells','CellHl']
+        FREE_MODES = ['Wireframe','WShells','CellHl']
 
         active_shape = None; axes_shape = None
         main_shapes  = []; cell_buttons = []; cell_colors = {}
@@ -649,10 +790,9 @@ async def main_async():
         quiz_buttons = [ToggleButton(0,0,160,30,f"Option {i+1}",(150,150,150)) for i in range(5)]
         btn_idk      = ToggleButton(0,0,160,30,"I Don't Know",(200,100,100))
 
-        # Mode buttons — three side-by-side in the HUD
         free_mode_btns = [
             ToggleButton(0,0,108,28,"Wireframe",(80,120,200)),
-            ToggleButton(0,0,108,28,"W-Shells", (80,180,120)),
+            ToggleButton(0,0,108,28,"WShells", (80,180,120)),
             ToggleButton(0,0,108,28,"CellHl",   (180,120,80)),
         ]
         shape_dropdown    = Dropdown(0,0,160,28,SHAPE_NAMES,SHAPE_COLS)
@@ -699,22 +839,16 @@ async def main_async():
 
         def layout_free():
             hud_top = HEIGHT - FREE_HUD + 8
-
-            # Row 0: Mode buttons, left-aligned at x=90
             bx = 90
             for b in free_mode_btns:
                 b.rect.x = bx; b.rect.y = hud_top
                 bx += b.rect.width + 6
-
-            # Row 1: Shape dropdown, then toggle buttons
             shape_dropdown.x = 90
             shape_dropdown.y = hud_top + 38
             btn_toggle_origin.rect.x = 90 + shape_dropdown.w + 12
             btn_toggle_origin.rect.y = hud_top + 38
             btn_toggle_waxis.rect.x  = btn_toggle_origin.rect.right + 8
             btn_toggle_waxis.rect.y  = hud_top + 38
-
-            # Sliders on the right half
             slider_x = WIDTH // 2 + 20
             row_h    = 44
             for i,s in enumerate(sliders):
@@ -857,7 +991,7 @@ async def main_async():
 
             for i in range(6): dips[i]=tucks[i]=skews[i]=0.0
             renderers['Wireframe'].a4=a4_correct
-            renderers['W-Shells'].a4 =a4_correct
+            renderers['WShells'].a4 =a4_correct
             renderers['CellHl'].a4   =a4_correct
             q_start_time=time.time(); state="ANALYSIS"
             td.start_ana(question_index)
@@ -915,6 +1049,8 @@ async def main_async():
                                     survey_source          = survey_origin
                                     survey_familiarity     = survey_familiarity_val
                                     td.mark_survey_done()
+                                    # Submit early partial response to capture drop-outs
+                                    #asyncio.create_task(submit_survey(td, survey_origin, survey_familiarity_val))
                                     enter_tutorial()
 
                         # ---- TUTORIAL ----
@@ -925,7 +1061,7 @@ async def main_async():
                                 if not any(r.collidepoint(event.pos) for r in ui_rects):
                                     tutorial_dragging=True; tutorial_lastx=event.pos[0]
                                     vp_centre_y=(HEIGHT-300)//2
-                                    tutorial_drag_inverted=(event.pos[1]>vp_centre_y)
+                                    tutorial_drag_inverted=(event.pos[1]<vp_centre_y)
                             elif event.type==pygame.MOUSEBUTTONUP and event.button==1:
                                 tutorial_dragging=False
                             elif event.type==pygame.MOUSEMOTION and tutorial_dragging:
@@ -959,7 +1095,7 @@ async def main_async():
                             elif tutorial_sub=="ANSWER" and tutorial_answered:
                                 btn_tutorial_next.handle_event(event)
                                 if btn_tutorial_next.selected:
-                                    btn_tutorial_next.selected=False; state="INTERSTITIAL"
+                                    btn_tutorial_next.selected=False; state="INTERSTITIAL"; interstitial_text=None
 
                         # ---- INTERSTITIAL ----
                         elif state=="INTERSTITIAL":
@@ -1010,10 +1146,10 @@ async def main_async():
                                 btn_next.selected=False; question_index+=1
                                 if question_index>=TOTAL_QUIZ_QUESTIONS:
                                     asyncio.create_task(submit_full_session(
-                                        td, mode, survey_origin, survey_familiarity_val, user_id))
+                                        td, mode, survey_origin, survey_familiarity_val))
                                     enter_free(from_quiz=True)
                                 elif question_index%5==0:
-                                    state="INTERSTITIAL"
+                                    state="INTERSTITIAL"; interstitial_text=None
                                     ri=question_index//5-1
                                     if ri<len(td.readtime): td.start_read(ri)
                                 else:
@@ -1023,9 +1159,8 @@ async def main_async():
                         elif state=="FREE_MODE":
                             ev_consumed=any(s.handle_event(event) for s in sliders)
 
-                        # Shared free-mode controls (also handle when not consumed)
+                        # Shared free-mode controls
                         if state=="FREE_MODE" and not ev_consumed:
-                            # Close dropdown on outside click
                             if (event.type==pygame.MOUSEBUTTONDOWN and shape_dropdown.is_open and
                                     not pygame.Rect(shape_dropdown.x,
                                                     shape_dropdown.y-len(SHAPE_NAMES)*shape_dropdown.h,
@@ -1063,7 +1198,7 @@ async def main_async():
                                 if mode=='CellHl':
                                     for b in cell_buttons: b.handle_event(event)
 
-                        # ---- Viewport drag (all non-tutorial states) ----
+                        # ---- Viewport drag ----
                         slider_hot_now=any(s.is_dragging for s in sliders) or (state=="FREE_MODE" and ev_consumed)
 
                         if state!="TUTORIAL":
@@ -1075,36 +1210,22 @@ async def main_async():
                                     in_hud=(event.pos[1]>=HEIGHT-(FREE_HUD if state=="FREE_MODE" else 300))
                                     if not any(b.rect.collidepoint(event.pos) for b in all_ui) and not in_hud:
                                         dragging=True; lastx,lasty=event.pos; drag_start_pos=event.pos
-
-                                        # ---- Z-axis split line fix ----
-                                        # The origin/axes_shape is drawn centred on the viewport,
-                                        # so the viewport centre in screen coords is:
-                                        #   vp_centre_y = (HEIGHT - HUD) // 2
-                                        # The ov[] positions are relative to that centre.
-                                        # We search axes_shape for the label "z" and convert to
-                                        # screen-Y. We take the TOPMOST z-endpoint so that dragging
-                                        # above it (above the +Z tip) doesn't invert — only dragging
-                                        # below the +Z tip inverts.
-                                        if state=="FREE_MODE":
-                                            vp_h_now=HEIGHT-300
-                                        vp_centre_y=vp_h_now//2   # screen-Y of the rendered origin
-
-                                        drag_inverted=False  # default: no invert
+                                        vp_h_now = HEIGHT - 300
+                                        vp_centre_y = vp_h_now // 2
+                                        drag_inverted=False
                                         if axes_shape and hasattr(axes_shape,'ov') and hasattr(axes_shape,'getText'):
                                             z_screen_ys=[]
                                             for _pi in range(len(axes_shape.ov)):
                                                 _lbl=axes_shape.getText(_pi)
                                                 if _lbl and _lbl.lower()=='z':
-                                                    # ov[i][1] is the Y offset FROM the viewport centre
-                                                    z_screen_ys.append(vp_centre_y+round(axes_shape.ov[_pi][1]))
+                                                    z_screen_ys.append(vp_centre_y-round(axes_shape.ov[_pi][1]))
                                             if z_screen_ys:
-                                                # Topmost z tip on screen (smallest screen-Y value)
                                                 z_top=min(z_screen_ys)
-                                                drag_inverted=(event.pos[1]<z_top)
+                                                drag_inverted=(event.pos[1]>z_top)
                                             else:
-                                                drag_inverted=(event.pos[1]<vp_centre_y)
+                                                drag_inverted=(event.pos[1]>vp_centre_y)
                                         else:
-                                            drag_inverted=(event.pos[1]<vp_centre_y)
+                                            drag_inverted=(event.pos[1]>vp_centre_y)
 
                             elif event.type==pygame.MOUSEBUTTONUP and event.button==1:
                                 if dragging:
@@ -1112,7 +1233,7 @@ async def main_async():
                                     mx,my=event.pos
                                     dist=math.hypot(mx-drag_start_pos[0],my-drag_start_pos[1])
                                     omx,omy=mouse_history[0]
-                                    vx=-(mx-omx)/(xsens*2.5); vy=-(my-omy)/(ysens*2.5)
+                                    vx=-(mx-omx)/(xsens*2.5); vy=(my-omy)/(ysens*2.5)
                                     if drag_inverted: vx=-vx
                                     if dist>15:
                                         if abs(vx)>abs(vy) and abs(vx)>0.1: dy=vx; dr=0
@@ -1125,7 +1246,7 @@ async def main_async():
                                 mx,my=event.pos
                                 dx=-mx+lastx
                                 if drag_inverted: dx=-dx
-                                yaw+=dx/xsens; roll-=(my-lasty)/ysens
+                                yaw+=dx/xsens; roll+=(my-lasty)/ysens
                                 lastx,lasty=mx,my; dr=dy=0
 
                             if event.type==pygame.MOUSEWHEEL and state not in ("TUTORIAL",):
@@ -1145,7 +1266,7 @@ async def main_async():
                                     d4+=sv
                                 else:
                                     if mode=='Wireframe':  ortho=max(0,min(0.005,ortho+event.y*0.0002))
-                                    elif mode=='W-Shells': target_w+=event.y*10.0
+                                    elif mode=='WShells': target_w+=event.y*10.0
                                     elif mode=='CellHl':   opacity=max(0.0,min(1.0,opacity+event.y*0.05))
 
                             if event.type==pygame.KEYDOWN and state not in ("SURVEY","CONSENT","TUTORIAL"):
@@ -1161,7 +1282,6 @@ async def main_async():
                         log_error(f"Event handling error (frame {frame_count}): {e}")
                         traceback.print_exc()
 
-                # Apply pending dropdown shape change
                 if pending_shape_idx is not None and pending_shape_idx!=free_shape_idx:
                     free_shape_idx=pending_shape_idx
                     rebuild_free_shape(); update_free_sel()
@@ -1196,6 +1316,7 @@ async def main_async():
                         layout_consent()
                         t=huge_font.render("4D Axis Quiz Platform",True,(220,220,255))
                         screen.blit(t,(WIDTH//2-t.get_width()//2,40))
+
                         lines=[
                             "This study investigates how people perceive 4-dimensional rotations",
                             "through different visual representations.",
@@ -1233,23 +1354,6 @@ async def main_async():
                     # ---- TUTORIAL ----
                     elif state=="TUTORIAL":
                         layout_tutorial()
-
-                        def get_tutorial_angles(M_deg,Sp_deg,Sr_deg):
-                            M,Sp,Sr=math.radians(M_deg),math.radians(Sp_deg),math.radians(Sr_deg)
-                            r11=math.cos(M)*math.cos(Sp)
-                            r12=math.cos(M)*math.sin(Sp)*math.sin(Sr)-math.sin(M)*math.cos(Sr)
-                            r13=math.cos(M)*math.sin(Sp)*math.cos(Sr)+math.sin(M)*math.sin(Sr)
-                            r21=math.sin(M)*math.cos(Sp)
-                            r23=math.sin(M)*math.sin(Sp)*math.cos(Sr)-math.cos(M)*math.sin(Sr)
-                            r33=math.cos(Sp)*math.cos(Sr)
-                            p_rad=math.asin(max(-1.0,min(1.0,r13)))
-                            cp=math.cos(p_rad)
-                            if abs(cp)>1e-6:
-                                r_rad=math.atan2(-r23,r33)
-                                y_rad=math.atan2(-r12,r11)
-                            else:
-                                r_rad=0; y_rad=math.atan2(r21,math.cos(math.radians(Sp_deg))*math.cos(Sr))
-                            return math.degrees(y_rad),math.degrees(p_rad),math.degrees(r_rad)
 
                         y,p,r=get_tutorial_angles(tutorial_mouse_yaw,tutorial_angle,0)
 
@@ -1318,16 +1422,21 @@ async def main_async():
                     # ---- INTERSTITIAL ----
                     elif state=="INTERSTITIAL":
                         layout_quiz()
-                        block_idx=question_index//5
-                        try:
-                            with open(f"interval_{mode}_{block_idx}.txt") as f: text=f.read()
-                        except Exception:
-                            text=(f"Block {block_idx+1} of {TOTAL_QUIZ_QUESTIONS//5}"
-                                  f"  --  {TOTAL_QUIZ_QUESTIONS} questions total\n\n"
-                                  "Analyse each shape's 4D rotation before guessing.\n\n"
-                                  "Click Continue when ready.")
+                        if interstitial_text is None:
+                            block_idx=question_index//5
+                            try:
+                                try:
+                                    with open(f"texts/interval_{mode}_{block_idx}.txt") as f: interstitial_text=f.read()
+                                except:
+                                    with open(f"texts/interval_{block_idx}.txt") as f: interstitial_text=f.read()
+                            except Exception:
+                                interstitial_text=(f"Block {block_idx+1} of {TOTAL_QUIZ_QUESTIONS//5}"
+                                      f"  --  {TOTAL_QUIZ_QUESTIONS} questions total\n\n"
+                                      "Analyse each shape's 4D rotation before guessing.\n\n"
+                                      "Click Continue when ready.")
+
                         y_pos=HEIGHT//2-100
-                        for line in text.split('\n'):
+                        for line in interstitial_text.split('\n'):
                             s=big_font.render(line,True,(255,255,255))
                             screen.blit(s,(WIDTH//2-s.get_width()//2,y_pos)); y_pos+=44
                         btn_continue.draw(screen,font)
@@ -1343,15 +1452,13 @@ async def main_async():
                             cellhl={i for i,b in enumerate(cell_buttons) if b.getsel()}
                             if state=="ANALYSIS":
                                 if mode=='Wireframe':  renderers['Wireframe'].render(vp,main_shapes)
-                                elif mode=='W-Shells': renderers['W-Shells'].render(vp,main_shapes,target_w)
+                                elif mode=='WShells': renderers['WShells'].render(vp,main_shapes,target_w)
                                 elif mode=='CellHl':   renderers['CellHl'].render(vp,main_shapes,opacity,cellhl,cell_colors)
                         screen.blit(vp,(0,0))
                         pygame.draw.line(screen,(100,100,100),(0,HEIGHT-300),(WIDTH,HEIGHT-300),2)
 
-                        screen.blit(font.render(f"Assigned Mode: {mode}  |  User ID: {user_id}",True,(200,200,200)),(20,20))
+                        screen.blit(font.render(f"Assigned Mode: {mode}",True,(200,200,200)),(20,20))
                         screen.blit(big_font.render(f"Question {question_index+1} / {TOTAL_QUIZ_QUESTIONS}",True,(255,255,100)),(20,60))
-
-                        # Timing display hidden from user (recorded silently)
 
                         if mode=='CellHl':
                             layout_cell(); [b.draw(screen,font) for b in cell_buttons]
@@ -1396,7 +1503,7 @@ async def main_async():
                                 sh.shrink(ortho if mode=='Wireframe' else 0.001)
                             cellhl={i for i,b in enumerate(cell_buttons) if b.getsel()}
                             if mode=='Wireframe':  renderers['Wireframe'].render(vp,visible_shapes)
-                            elif mode=='W-Shells': renderers['W-Shells'].render(vp,visible_shapes,target_w)
+                            elif mode=='WShells': renderers['WShells'].render(vp,visible_shapes,target_w)
                             elif mode=='CellHl':   renderers['CellHl'].render(vp,visible_shapes,opacity,cellhl,cell_colors)
 
                         if show_4d_overlay:
@@ -1409,7 +1516,7 @@ async def main_async():
 
                         title=big_font.render(f"Free Exploration  |  {SHAPE_NAMES[free_shape_idx]}  |  {mode}",True,(255,220,80))
                         screen.blit(title,(20,10))
-                        screen.blit(font.render(f"User ID: {user_id}",True,(160,160,160)),(20,48))
+                        screen.blit(font.render(f"Free Exploration",True,(160,160,160)),(20,48))
 
                         layout_free()
                         hud_top=HEIGHT-FREE_HUD+8

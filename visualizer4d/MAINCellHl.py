@@ -9,9 +9,11 @@ class CellHlRenderer:
         self.a4 = a4
         self.font = pygame.font.SysFont(None, 24)
 
+    def _sx(self, x): return self.WIDTH  // 2 + round(x)
+    def _sy(self, y): return self.HEIGHT // 2 - round(y)   # Y-flip: up is positive
+
     def sort_coplanar_vertices(self, verts_3d):
         if len(verts_3d) <= 2: return [i for i in range(len(verts_3d))]
-        # Pure Python helpers
         def mean(pts):
             return [sum(p[i] for p in pts)/len(pts) for i in range(3)]
         def dot(v1, v2):
@@ -67,8 +69,8 @@ class CellHlRenderer:
                         polygons_to_draw.append({
                             'z': avg_z,
                             'type': 'line',
-                            'p1': (self.WIDTH//2 + round(p1[0]), self.HEIGHT//2 + round(p1[1])),
-                            'p2': (self.WIDTH//2 + round(p2[0]), self.HEIGHT//2 + round(p2[1])),
+                            'p1': (self._sx(p1[0]), self._sy(p1[1])),
+                            'p2': (self._sx(p2[0]), self._sy(p2[1])),
                             'c1': (max(0, g-30), max(0, g-30), max(0, g-30)),
                             'c2': (g, g, g)
                         })
@@ -90,7 +92,7 @@ class CellHlRenderer:
                         avg_z = 0
                         for sv in sorted_rel_idx:
                             idx = face_vertices[sv]
-                            ordered_pts.append((self.WIDTH//2 + round(shape.ov[idx][0]), self.HEIGHT//2 + round(shape.ov[idx][1])))
+                            ordered_pts.append((self._sx(shape.ov[idx][0]), self._sy(shape.ov[idx][1])))
                             avg_z += shape.ov[idx][2]
                         avg_z /= len(face_vertices)
                         
@@ -128,8 +130,8 @@ class CellHlRenderer:
                         local_pts = [(p[0] - min_x, p[1] - min_y) for p in pts]
                         pygame.draw.polygon(target_surf, item['color'], local_pts, 0)
                         screen.blit(target_surf, (min_x, min_y))
-                        
-        # 2. Collect Labels into the draw_list for Z-sorting
+
+        # Labels
         draw_list = []
         final_text = []
         for shape in shapes:
@@ -139,8 +141,8 @@ class CellHlRenderer:
                     if text:
                         z = shape.ov[p][2]
                         w = shape.ov[p][3]
-                        sx = self.WIDTH//2 + round(shape.ov[p][0])
-                        sy = self.HEIGHT//2 + round(shape.ov[p][1])
+                        sx = self._sx(shape.ov[p][0])
+                        sy = self._sy(shape.ov[p][1])
                         
                         g_val = 127 + round(z * self.tuning)
                         d_val = round((w + w) * self.tuning)
@@ -159,24 +161,13 @@ class CellHlRenderer:
         draw_list.sort(key=lambda x: x['z'])
         
         for item in draw_list:
-            if item['type'] == 'poly':
-                # ... (poly drawing)
-                pts = item['pts']
-                min_x, max_x = min(p[0] for p in pts) - 5, max(p[0] for p in pts) + 5
-                min_y, max_y = min(p[1] for p in pts) - 5, max(p[1] for p in pts) + 5
-                w_bd, h_bd = max_x - min_x, max_y - min_y
-                if w_bd > 0 and h_bd > 0:
-                    tsurf = pygame.Surface((w_bd, h_bd), pygame.SRCALPHA)
-                    local_pts = [(p[0] - min_x, p[1] - min_y) for p in pts]
-                    pygame.draw.polygon(tsurf, item['color'], local_pts, 0)
-                    screen.blit(tsurf, (min_x, min_y))
-            elif item['type'] == 'circle':
+            if item['type'] == 'circle':
                 pygame.draw.circle(screen, item['color'], item['pos'], 10)
 
-        # Draw Labels on TOP
         for lbl in final_text:
             text_surf = self.font.render(lbl['text'], True, (255, 255, 255))
             screen.blit(text_surf, (lbl['pos'][0] - text_surf.get_width()//2, lbl['pos'][1] - text_surf.get_height()//2))
+
 
 class ToggleButton:
     def __init__(self, x, y, w, h, label, color):
@@ -203,6 +194,7 @@ class ToggleButton:
 
     def getsel(self):
         return self.selected
+
 
 def main(a4=(0.1, 0.0, 0.0)):
     from Tesseract import Tesseract

@@ -10,6 +10,9 @@ class WireframeRenderer:
         self.a4 = a4
         self.font = pygame.font.SysFont(None, 24)
 
+    def _sx(self, x): return self.WIDTH  // 2 + round(x)
+    def _sy(self, y): return self.HEIGHT // 2 - round(y)   # Y-flip: up is positive
+
     def render(self, screen, shapes):
         items_to_draw = []
         final_text = []
@@ -22,24 +25,20 @@ class WireframeRenderer:
                     if text:
                         z = shape.ov[p][2]
                         w = shape.ov[p][3]
-                        pos = (self.WIDTH//2 + round(shape.ov[p][0]), self.HEIGHT//2 + round(shape.ov[p][1]))
+                        pos = (self._sx(shape.ov[p][0]), self._sy(shape.ov[p][1]))
                         
-                        # Node Color
                         g_val = 127 + round(z * self.tuning)
                         d_val = round((w + w) * self.tuning)
                         r_c = max(0, min(255, int(g_val + d_val)))
                         b_c = max(0, min(255, int(g_val - d_val)))
                         g_c = max(0, min(255, int(g_val)))
                         
-                        # Circles stay in the Z-sort pipeline
                         items_to_draw.append({
                             'z': z,
                             'type': 'circle',
                             'pos': pos,
                             'color': (r_c, g_c, b_c)
                         })
-                        
-                        # Text will be drawn on top at the end
                         final_text.append({'text': text, 'pos': pos})
 
             # 2. Edges
@@ -71,15 +70,14 @@ class WireframeRenderer:
                     items_to_draw.append({
                         'z': avg_z,
                         'type': 'line',
-                        'p1': (self.WIDTH//2 + round(pt1[0]), self.HEIGHT//2 + round(pt1[1])),
-                        'p2': (self.WIDTH//2 + round(pt2[0]), self.HEIGHT//2 + round(pt2[1])),
+                        'p1': (self._sx(pt1[0]), self._sy(pt1[1])),
+                        'p2': (self._sx(pt2[0]), self._sy(pt2[1])),
                         'thickness_shadow': 9,
                         'thickness_main': 5,
                         'c_shadow': (r_c, g_shadow, b_c),
                         'c_main': (r_c, g_c, b_c)
                     })
 
-        # Sort and Blit Geometry (Lines + Circles)
         items_to_draw.sort(key=lambda item: item['z'])
         for item in items_to_draw:
             if item['type'] == 'line':
@@ -88,10 +86,10 @@ class WireframeRenderer:
             elif item['type'] == 'circle':
                 pygame.draw.circle(screen, item['color'], item['pos'], 10)
 
-        # Draw Labels on TOP
         for lbl in final_text:
             text_surf = self.font.render(lbl['text'], True, (255, 255, 255))
             screen.blit(text_surf, (lbl['pos'][0] - text_surf.get_width()//2, lbl['pos'][1] - text_surf.get_height()//2))
+
 
 def main(a4=(0.1, 0.0, 0.0)):
     from Tesseract import Tesseract
@@ -165,7 +163,6 @@ def main(a4=(0.1, 0.0, 0.0)):
             tuck = (tuck + d4 * a4[1]) % 360
             skew = (skew + d4 * a4[2]) % 360
 
-        
         for shape in shapes:
             shape.rotate(yaw, pitch, roll, dip, tuck, skew)
             shape.shrink(ortho)

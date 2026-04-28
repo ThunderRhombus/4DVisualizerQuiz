@@ -5,7 +5,7 @@ class TutorialRenderer:
     """
     Wireframe renderer for the tutorial cube.
     Reads shape.ov (populated by FourShape.rotate) directly.
-    Uses only x, y, z — ignores w so the cube looks purely 3D.
+    Uses x, y, z — Y is flipped so up is positive (right-handed: X right, Y up, Z out).
     """
 
     TUNING       = 0.25
@@ -17,6 +17,9 @@ class TutorialRenderer:
         self.WIDTH  = width
         self.HEIGHT = height
 
+    def _sx(self, x): return self.WIDTH  // 2 + round(x)
+    def _sy(self, y): return self.HEIGHT // 2 - round(y)  # Y-flip: up is positive
+
     def render(self, screen: pygame.Surface, shapes: list) -> None:
         items = []
 
@@ -25,7 +28,6 @@ class TutorialRenderer:
             if not ov:
                 continue
 
-            # Edges
             for key in shape.edges.adj:
                 if key >= 0:
                     continue
@@ -39,11 +41,11 @@ class TutorialRenderer:
                 p1 = ov[n0]   # [x, y, z, w]
                 p2 = ov[n1]
 
-                N = 14 # Number of segments for gradient lines
+                N = 14
                 for i in range(N):
                     t1 = i / N
                     t2 = (i + 1) / N
-                    ix1 = p1[0] * (1 - t1) + p2[0] * t1
+                    ix1 = p1[0]*(1-t1) + p2[0]*t1
                     iy1 = p1[1]*(1-t1) + p2[1]*t1
                     iz1 = p1[2]*(1-t1) + p2[2]*t1
                     ix2 = p1[0]*(1-t2) + p2[0]*t2
@@ -53,15 +55,13 @@ class TutorialRenderer:
 
                     g        = max(0, min(255, int(127 + avg_z * self.TUNING)))
                     g_shadow = max(0, min(255, g - self.SHADOW_DROP))
-                    line_color = (g, g, g)
+                    line_color   = (g, g, g)
                     shadow_color = (g_shadow, g_shadow, g_shadow)
 
                     items.append({
                         'z': avg_z,
-                        'p1': (self.WIDTH  // 2 + round(ix1),
-                               self.HEIGHT // 2 + round(iy1)),
-                        'p2': (self.WIDTH  // 2 + round(ix2),
-                               self.HEIGHT // 2 + round(iy2)),
+                        'p1': (self._sx(ix1), self._sy(iy1)),
+                        'p2': (self._sx(ix2), self._sy(iy2)),
                         'c_shadow': shadow_color,
                         'c_main':   line_color,
                     })
