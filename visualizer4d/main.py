@@ -481,8 +481,48 @@ async def main_async():
         # ------------------------------------------------------------------
         # Session
         # ------------------------------------------------------------------
-        user_id       = random.randint(10000, 99999)
-        assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
+        # Allow the browser to process initial window calls before network activity
+        await asyncio.sleep(0.01)
+
+        # Pull balancing counts from the public CSV export of your spreadsheet
+        assigned_mode = "CellHl" # Default fallback
+        try:
+            if sys.platform == 'emscripten':
+                import js
+                # Fetching as CSV to read specific cells (C1, D1, E1)
+                BALANCING_URL = "https://docs.google.com/spreadsheets/d/1aDEtjzNG4zhUMsXh9k98M5nmLQAA96tAxrOQ60wC2lY/export?format=csv&gid=65633586"
+                resp = await js.fetch(BALANCING_URL)
+                if resp.ok:
+                    text = await resp.text()
+                    first_line = text.splitlines()[0]
+                    parts = [p.strip() for p in first_line.split(',')]
+                    if len(parts) >= 5:
+                        try:
+                            # C1, D1, E1 counts for balancing
+                            w_cnt = int(parts[2])
+                            s_cnt = int(parts[3])
+                            c_cnt = int(parts[4])
+                            
+                            counts = [(w_cnt, 'Wireframe'), (s_cnt, 'W-Shells'), (c_cnt, 'CellHl')]
+                            # Pick the mode with the lowest count
+                            counts.sort(key=lambda x: x[0])
+                            assigned_mode = counts[0][1]
+                            log_debug(f"Balancing: W={w_cnt}, S={s_cnt}, C={c_cnt} → assigned {assigned_mode}")
+                        except (ValueError, IndexError):
+                            assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
+                    else:
+                        assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
+                else:
+                    assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
+            else:
+                # Local desktop fallback: use fixed seed for deterministic testing
+                random.seed(42)
+                assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
+                log_debug(f"Local mode (seeded random): {assigned_mode}")
+        except Exception as e:
+            log_debug(f"Balancing fetch failed: {e}")
+            assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
+
         mode          = assigned_mode
         state         = "CONSENT"
 
