@@ -481,48 +481,45 @@ async def main_async():
         # ------------------------------------------------------------------
         # Session
         # ------------------------------------------------------------------
-        # Allow the browser to process initial window calls before network activity
-        await asyncio.sleep(0.01)
-
-        # Pull balancing counts from the public CSV export of your spreadsheet
-        assigned_mode = "CellHl" # Default fallback
-        try:
-            if sys.platform == 'emscripten':
-                import js
-                # Fetching as CSV to read specific cells (C1, D1, E1)
-                BALANCING_URL = "https://docs.google.com/spreadsheets/d/1aDEtjzNG4zhUMsXh9k98M5nmLQAA96tAxrOQ60wC2lY/export?format=csv&gid=65633586"
-                resp = await js.fetch(BALANCING_URL)
-                if resp.ok:
-                    text = await resp.text()
-                    first_line = text.splitlines()[0]
-                    parts = [p.strip() for p in first_line.split(',')]
-                    if len(parts) >= 5:
-                        try:
-                            # C1, D1, E1 counts for balancing
+        assigned_mode = "CellHl"  # Default fallback
+        
+        # Background task to fetch balancing counts from spreadsheet (non-blocking)
+        async def fetch_balancing_counts():
+            """Background task to fetch balancing counts from spreadsheet."""
+            nonlocal assigned_mode, mode
+            try:
+                if sys.platform == 'emscripten':
+                    import js
+                    BALANCING_URL = "https://docs.google.com/spreadsheets/d/1aDEtjzNG4zhUMsXh9k98M5nmLQAA96tAxrOQ60wC2lY/export?format=csv&gid=65633586"
+                    resp = await js.fetch(BALANCING_URL)
+                    if resp.ok:
+                        text = await resp.text()
+                        first_line = text.splitlines()[0]
+                        parts = [p.strip() for p in first_line.split(',')]
+                        if len(parts) >= 5:
                             w_cnt = int(parts[2])
                             s_cnt = int(parts[3])
                             c_cnt = int(parts[4])
-                            
                             counts = [(w_cnt, 'Wireframe'), (s_cnt, 'W-Shells'), (c_cnt, 'CellHl')]
-                            # Pick the mode with the lowest count
                             counts.sort(key=lambda x: x[0])
-                            assigned_mode = counts[0][1]
-                            log_debug(f"Balancing: W={w_cnt}, S={s_cnt}, C={c_cnt} → assigned {assigned_mode}")
-                        except (ValueError, IndexError):
-                            assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
-                    else:
-                        assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
+                            new_mode = counts[0][1]
+                            # Only update if still in early stages (before analysis starts)
+                            if state in ("CONSENT", "SURVEY"):
+                                assigned_mode = new_mode
+                                mode = new_mode
+                                log_debug(f"Balancing: W={w_cnt}, S={s_cnt}, C={c_cnt} → assigned {new_mode}")
                 else:
+                    # Local desktop: use seeded random
+                    random.seed(42)
                     assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
-            else:
-                # Local desktop fallback: use fixed seed for deterministic testing
-                random.seed(42)
-                assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
-                log_debug(f"Local mode (seeded random): {assigned_mode}")
-        except Exception as e:
-            log_debug(f"Balancing fetch failed: {e}")
-            assigned_mode = random.choice(['Wireframe', 'W-Shells', 'CellHl'])
-
+                    mode = assigned_mode
+                    log_debug(f"Local mode (seeded random): {assigned_mode}")
+            except Exception as e:
+                log_debug(f"Balancing fetch background task failed: {e}")
+        
+        # Fire off the background fetch task immediately (non-blocking)
+        balancing_task = asyncio.create_task(fetch_balancing_counts())
+        
         mode          = assigned_mode
         state         = "CONSENT"
 
