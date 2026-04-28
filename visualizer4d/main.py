@@ -319,7 +319,7 @@ async def _post_form(data: dict):
 
             form = document.createElement("form")
             form.method = "POST"
-            form.action = FORM_URL
+            form.action = BALANCING_SCRIPT_URL
             form.target = iframe_id
             form.style.display = "none"
 
@@ -916,7 +916,7 @@ async def main_async():
             ToggleButton(0,0,108,28,"CellHl",   (180,120,80)),
         ]
         # "Set to 0" button for sliders
-        btn_sliders_zero = ToggleButton(0,0,80,24,"Set → 0",(100,100,160))
+        btn_sliders_zero = ToggleButton(0,0,80,24,"Set to 0",(100,100,160))
 
         shape_dropdown    = Dropdown(0,0,160,28,SHAPE_NAMES,SHAPE_COLS)
         btn_toggle_origin = ToggleButton(0,0,125,28,"ThreeAxis: ON",(80,120,160))
