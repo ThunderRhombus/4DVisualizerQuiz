@@ -319,7 +319,7 @@ async def _post_form(data: dict):
 
             form = document.createElement("form")
             form.method = "POST"
-            form.action = BALANCING_SCRIPT_URL
+            form.action = FORM_URL
             form.target = iframe_id
             form.style.display = "none"
 
@@ -735,7 +735,7 @@ def render_interstitial_text(screen, text, font, big_font, small_font,
         if scroll_offset < max_scroll - 10:
             hint = small_font.render("scroll for more", True, (200, 200, 100))
             # Draw a subtle background strip so hint is readable over any text
-            hint_rect = hint.get_rect(centerx=WIDTH // 2, y=VIEWPORT_H - hint.get_height() + 40)
+            hint_rect = hint.get_rect(centerx=WIDTH // 2, y=VIEWPORT_H - hint.get_height() + 50)
             bg_rect = hint_rect.inflate(20, 6)
             bg_surf = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
             bg_surf.fill((5, 5, 5, 180))
