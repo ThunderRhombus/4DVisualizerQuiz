@@ -107,20 +107,45 @@ def log_error(msg):  print(f"[4D-ERROR] {msg}", file=sys.stderr)
 # ============================================================
 FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfXKygh8Wsv-MU_2u0bjt1eaExFICsbKm7SO-3a4s4O26NUPA/formResponse"
 
-ENTRY_ORIGIN      = "entry.REPLACE_ORIGIN"
-ENTRY_FAMILIARITY = "entry.REPLACE_FAMILIARITY"
-ENTRY_TUTO        = "entry.REPLACE_TUTO"
-ENTRY_PRETIME     = "entry.REPLACE_PRETIME"
-ENTRY_TUTOANATIME = "entry.REPLACE_TUTOANATIME"
-ENTRY_TUTOANSTIME = "entry.REPLACE_TUTOANSTIME"
-ENTRY_MODEL       = "entry.REPLACE_MODEL"
+ENTRY_ORIGIN      = "entry.1314273606"
+ENTRY_FAMILIARITY = "entry.441154203"
+ENTRY_TUTO        = "entry.1880574806"
+ENTRY_PRETIME     = "entry.645659725"
+ENTRY_TUTOANATIME = "entry.1614115597"
+ENTRY_TUTOANSTIME = "entry.1784483735"
+ENTRY_MODEL       = "entry.668887448"
 
-ENTRY_ANATIME = [f"entry.REPLACE_ANATIME{i+1}"  for i in range(TOTAL_QUIZ_QUESTIONS)]
-ENTRY_ANSTIME = [f"entry.REPLACE_ANSTIME{i+1}"  for i in range(TOTAL_QUIZ_QUESTIONS)]
-ENTRY_READTIME= [f"entry.REPLACE_READTIME{i+1}" for i in range(3)]
-ENTRY_OPTIONS = [f"entry.REPLACE_OPTIONS{i+1}"  for i in range(TOTAL_QUIZ_QUESTIONS)]
-ENTRY_ACC     = [f"entry.REPLACE_ACC{i+1}"      for i in range(TOTAL_QUIZ_QUESTIONS)]
-ENTRY_CHOICE  = [f"entry.REPLACE_CHOICE{i+1}"   for i in range(TOTAL_QUIZ_QUESTIONS)]
+ENTRY_ANATIME = [
+    "entry.355370598",  "entry.476768110",  "entry.626000791",  "entry.955976263",
+    "entry.232825616",  "entry.2115909041", "entry.677281729",  "entry.1633786226",
+    "entry.1335142925", "entry.1613074632", "entry.388610013",  "entry.158821835",
+    "entry.77988818",   "entry.2061064430", "entry.1156148626",
+]
+ENTRY_ANSTIME = [
+    "entry.768698020",  "entry.393448772",  "entry.1028203807", "entry.249457686",
+    "entry.30999603",   "entry.2056975355", "entry.1462704473", "entry.1249863795",
+    "entry.2029445584", "entry.1814780546", "entry.1528808670", "entry.29993410",
+    "entry.1111111733", "entry.275793044",  "entry.1090488432",
+]
+ENTRY_READTIME= ["entry.1667660146", "entry.1444308924"]
+ENTRY_OPTIONS = [
+    "entry.1410714464", "entry.686195860",  "entry.1903582081", "entry.804227748",
+    "entry.1552357830", "entry.985403343",  "entry.586354369",  "entry.1800343372",
+    "entry.1753755800", "entry.1592964331", "entry.1488540948", "entry.1052334710",
+    "entry.1647047385", "entry.1357756722", "entry.946570160",
+]
+ENTRY_ACC     = [
+    "entry.1123870241", "entry.876441989",  "entry.107444736",  "entry.867773105",
+    "entry.880663388",  "entry.167226558",  "entry.1839444534", "entry.1574794871",
+    "entry.1105045680", "entry.1390440842", "entry.1808678547", "entry.20416211",
+    "entry.2026122329", "entry.1113584818", "entry.764061028",
+]
+ENTRY_CHOICE  = [
+    "entry.950980923",  "entry.2027806122", "entry.1679651366", "entry.639514842",
+    "entry.1653941747", "entry.1251829575", "entry.1633190029", "entry.1044139991",
+    "entry.1014351439", "entry.1714729522", "entry.1678345719", "entry.1045166073",
+    "entry.279914678",  "entry.175768213",  "entry.2018112989",
+]
 
 
 # ============================================================
@@ -135,7 +160,7 @@ class TimingData:
         self.tuto_result   = ""
         self.anatime       = [0.0] * TOTAL_QUIZ_QUESTIONS
         self.anstime       = [0.0] * TOTAL_QUIZ_QUESTIONS
-        self.readtime      = [0.0, 0.0, 0.0]
+        self.readtime      = [0.0, 0.0]
         self.options       = [""] * TOTAL_QUIZ_QUESTIONS
         self.acc           = [""] * TOTAL_QUIZ_QUESTIONS
         self.choice        = [""] * TOTAL_QUIZ_QUESTIONS
@@ -178,8 +203,16 @@ class TimingData:
             if ri < len(self.readtime):
                 self.readtime[ri] = round(time.time() - self._read_start, 2)
 
-    def record_answer(self, qi, chosen_label, is_correct, is_idk):
-        self.options[qi] = chosen_label
+    def record_answer(self, qi, chosen_label, is_correct, is_idk, shape_name="", a4_variants=None, correct_idx=None):
+        # options encodes question context: shape + all 5 presented a4 tuples + which was correct
+        if a4_variants:
+            variants_str = "|".join(
+                f"O{i}:({v[0]:.3f},{v[1]:.3f},{v[2]:.3f})" for i, v in enumerate(a4_variants[1:], 1)
+            )
+            correct_str = f"|correct=O{correct_idx}" if correct_idx is not None else ""
+            self.options[qi] = f"{shape_name}|{variants_str}{correct_str}"
+        else:
+            self.options[qi] = shape_name
         self.choice[qi]  = chosen_label
         if is_idk:         self.acc[qi] = "Didn't know"
         elif is_correct:   self.acc[qi] = "Correct"
@@ -603,7 +636,7 @@ async def main_async():
             btn_idk.rect.x=bx+5*174; btn_idk.rect.y=HEIGHT-68
 
         def layout_cell(vp_h=None):
-            rx=WIDTH-65
+            rx=WIDTH-100
             for idx,b in enumerate(cell_buttons):
                 b.rect.x=rx; b.rect.y=40+idx*30
 
@@ -665,7 +698,7 @@ async def main_async():
 
         def build_cell_btns(shape):
             lbls=getattr(shape,'cell_labels',[]); colors=getattr(shape,'cell_colors',{})
-            btns=[ToggleButton(0,0,50,25,lbl,colors.get(i,(150,150,150))) for i,lbl in enumerate(lbls)]
+            btns=[ToggleButton(0,0,100,25,lbl,colors.get(i,(150,150,150))) for i,lbl in enumerate(lbls)]
             return btns,colors
 
         def rebuild_free_shape():
@@ -830,7 +863,6 @@ async def main_async():
                                     survey_source          = survey_origin
                                     survey_familiarity     = survey_familiarity_val
                                     td.mark_survey_done()
-                                    asyncio.create_task(submit_survey(td, survey_origin, survey_familiarity_val))
                                     enter_tutorial()
 
                         # ---- TUTORIAL ----
@@ -902,7 +934,8 @@ async def main_async():
                                 if btn.selected:
                                     td.end_ans(question_index)
                                     chosen_label=f"Option {i+1}"; is_correct=(i+1==correct_idx)
-                                    td.record_answer(question_index,chosen_label,is_correct,False)
+                                    shape_name=getattr(active_shape,'__class__',type(active_shape)).__name__
+                                    td.record_answer(question_index,chosen_label,is_correct,False,shape_name,a4_variants,correct_idx)
                                     feedback_text="CORRECT! Axis mapping matches." if is_correct else f"WRONG. Correct was Option {correct_idx}."
                                     feedback_color=(100,255,100) if is_correct else (255,100,100)
                                     state="FEEDBACK"
@@ -911,7 +944,8 @@ async def main_async():
                             btn_idk.handle_event(event)
                             if btn_idk.selected:
                                 td.end_ans(question_index)
-                                td.record_answer(question_index,"I Don't Know",False,True)
+                                shape_name=getattr(active_shape,'__class__',type(active_shape)).__name__
+                                td.record_answer(question_index,"Option 6",False,True,shape_name,a4_variants,correct_idx)
                                 feedback_text=f"Correct was Option {correct_idx}."; feedback_color=(200,200,100)
                                 state="FEEDBACK"
                                 for ob in quiz_buttons: ob.selected=False
@@ -1014,11 +1048,11 @@ async def main_async():
                                             if z_screen_ys:
                                                 # Topmost z tip on screen (smallest screen-Y value)
                                                 z_top=min(z_screen_ys)
-                                                drag_inverted=(event.pos[1]>z_top)
+                                                drag_inverted=(event.pos[1]<z_top)
                                             else:
-                                                drag_inverted=(event.pos[1]>vp_centre_y)
+                                                drag_inverted=(event.pos[1]<vp_centre_y)
                                         else:
-                                            drag_inverted=(event.pos[1]>vp_centre_y)
+                                            drag_inverted=(event.pos[1]<vp_centre_y)
 
                             elif event.type==pygame.MOUSEBUTTONUP and event.button==1:
                                 if dragging:
@@ -1026,7 +1060,7 @@ async def main_async():
                                     mx,my=event.pos
                                     dist=math.hypot(mx-drag_start_pos[0],my-drag_start_pos[1])
                                     omx,omy=mouse_history[0]
-                                    vx=(mx-omx)/(xsens*2.5); vy=(my-omy)/(ysens*2.5)
+                                    vx=-(mx-omx)/(xsens*2.5); vy=-(my-omy)/(ysens*2.5)
                                     if drag_inverted: vx=-vx
                                     if dist>15:
                                         if abs(vx)>abs(vy) and abs(vx)>0.1: dy=vx; dr=0
@@ -1039,7 +1073,7 @@ async def main_async():
                                 mx,my=event.pos
                                 dx=-mx+lastx
                                 if drag_inverted: dx=-dx
-                                yaw-=dx/xsens; roll-=(my-lasty)/ysens
+                                yaw+=dx/xsens; roll-=(my-lasty)/ysens
                                 lastx,lasty=mx,my; dr=dy=0
 
                             if event.type==pygame.MOUSEWHEEL and state not in ("TUTORIAL",):
@@ -1234,7 +1268,7 @@ async def main_async():
                         layout_quiz()
                         block_idx=question_index//5
                         try:
-                            with open(f"interval_{block_idx}.txt") as f: text=f.read()
+                            with open(f"interval_{mode}_{block_idx}.txt") as f: text=f.read()
                         except Exception:
                             text=(f"Block {block_idx+1} of {TOTAL_QUIZ_QUESTIONS//5}"
                                   f"  --  {TOTAL_QUIZ_QUESTIONS} questions total\n\n"
@@ -1265,15 +1299,7 @@ async def main_async():
                         screen.blit(font.render(f"Assigned Mode: {mode}  |  User ID: {user_id}",True,(200,200,200)),(20,20))
                         screen.blit(big_font.render(f"Question {question_index+1} / {TOTAL_QUIZ_QUESTIONS}",True,(255,255,100)),(20,60))
 
-                        # Timing display
-                        if state=="ANALYSIS" and td._ana_start:
-                            elapsed=round(time.time()-td._ana_start,1)
-                            et=small_font.render(f"Analysis time: {elapsed}s",True,(120,120,140))
-                            screen.blit(et,(20,90))
-                        if state=="ANSWERING" and td._ans_start:
-                            elapsed=round(time.time()-td._ans_start,1)
-                            et=small_font.render(f"Answer time: {elapsed}s",True,(120,120,140))
-                            screen.blit(et,(20,90))
+                        # Timing display hidden from user (recorded silently)
 
                         if mode=='CellHl':
                             layout_cell(); [b.draw(screen,font) for b in cell_buttons]

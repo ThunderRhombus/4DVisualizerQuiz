@@ -238,7 +238,7 @@ def main(a4=(0.1, 0.0, 0.0)):
         4: (255, 100, 100), 5: (100, 255, 100), 6: (150, 0, 0), 7: (100, 100, 255),
     }
     for idx, label in enumerate(button_labels):
-        cell_buttons.append(ToggleButton(WIDTH-50, 40 + idx*40, 30, 30, label, cell_colors[label_to_cell[label]]))
+        cell_buttons.append(ToggleButton(WIDTH-100, 40 + idx*40, 30, 30, label, cell_colors[label_to_cell[label]]))
 
     running = True
     while running:

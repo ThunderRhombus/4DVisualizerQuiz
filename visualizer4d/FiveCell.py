@@ -6,19 +6,23 @@ class FiveCell(FourShape):
     """
     The 5-cell (pentachoron / 4-simplex).
     5 vertices, 10 edges, 10 triangular faces, 5 tetrahedral cells.
-    Each cell is the tetrahedron opposite one vertex — labelled by
-    the vertex it does NOT contain, named by its position.
+    Each cell is the tetrahedron opposite one vertex.
     """
 
-    # Each cell is the face opposite to a vertex; label by which vertex is excluded.
-    # Vertex positions: A=top(+W), B=front(+Z), C=right(+X), D=left(-X), E=back(-Z)
-    cell_labels = ["opp +W", "opp +Z", "opp +X", "opp -X", "opp -Z"]
+    # Each cell omits one vertex; labelled by the direction toward that vertex
+    # as visible on the XYZ origin widget.
+    #   omit v4 (+W apex)        → "-W"    (the base-tet cell)
+    #   omit v0 (+X+Y+Z corner)  → "+X+Y"
+    #   omit v1 (+X-Y-Z corner)  → "+X-Z"
+    #   omit v2 (-X+Y-Z corner)  → "-X+Y"
+    #   omit v3 (-X-Y+Z corner)  → "-X+Z"
+    cell_labels = ["-W", "+X+Y", "+X-Z", "-X+Y", "-X+Z"]
     cell_colors = {
-        0: (255, 220,  80),   # opposite top/+W  — gold
-        1: (100, 200, 255),   # opposite front   — sky blue
-        2: (255, 100, 100),   # opposite right   — red
-        3: (100, 255, 140),   # opposite left    — green
-        4: (200,  80, 255),   # opposite back    — purple
+        0: (255, 220,  80),   # -W base tet  — gold
+        1: (100, 200, 255),   # +X+Y corner  — sky blue
+        2: (255, 100, 100),   # +X-Z corner  — red
+        3: (100, 255, 140),   # -X+Y corner  — green
+        4: (200,  80, 255),   # -X+Z corner  — purple
     }
 
     def __init__(self, size, ortho, ox, oy, oz, ow):
@@ -32,6 +36,7 @@ class FiveCell(FourShape):
             ( 0,  0,  0,  4/m.sqrt(5)),
         ]
         edge_len = m.sqrt(sum((raw[0][k]-raw[1][k])**2 for k in range(4)))
+        # Scale so the shape fills space comparably to the Tesseract (edge ~200 units)
         scale = (2 * size) / edge_len
 
         self.v = [
@@ -57,7 +62,6 @@ class FiveCell(FourShape):
         def face_of(a, b, c):
             return triple_idx[tuple(sorted([a, b, c]))]
 
-        # Cell n omits vertex n — order matches cell_labels above
         for omit in range(5):
             verts = [v for v in range(5) if v != omit]
             i, j, k, l = verts
