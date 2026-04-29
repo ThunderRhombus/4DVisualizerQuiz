@@ -294,21 +294,18 @@ class TimingData:
 
 async def _post_form(data: dict):
     """
-    Submit to Google Forms.
+    Submit directly to Google Forms.
 
     Browser/pygbag:
-        Uses a real hidden HTML form POST into a hidden iframe. This avoids
-        CORS/no-cors opacity issues and behaves like a normal Google Form submit.
-
+        Hidden iframe + real form fields. Each key must be an entry.* field.
     Desktop:
-        Uses urllib in a background daemon thread so pygame does not freeze.
+        urllib POST to Google Forms.
     """
     try:
         if sys.platform == "emscripten":
             from js import document, window
-            import json
 
-            iframe_id = "apps_script_form_iframe"
+            iframe_id = "gform_hidden_iframe"
             iframe = document.getElementById(iframe_id)
             if iframe is None:
                 iframe = document.createElement("iframe")
@@ -319,22 +316,22 @@ async def _post_form(data: dict):
 
             form = document.createElement("form")
             form.method = "POST"
-            form.action = BALANCING_SCRIPT_URL
+            form.action = FORM_URL
             form.target = iframe_id
             form.style.display = "none"
 
-            inp = document.createElement("input")
-            inp.type = "hidden"
-            inp.name = "payload"
-            inp.value = json.dumps(data)
-            form.appendChild(inp)
+            for key, value in data.items():
+                inp = document.createElement("input")
+                inp.type = "hidden"
+                inp.name = str(key)
+                inp.value = str(value)
+                form.appendChild(inp)
 
             document.body.appendChild(form)
             form.submit()
             window.setTimeout(lambda: form.remove(), 3000)
-            log_debug(f"Submitted form payload to Apps Script with {len(data)} fields.")
+            log_debug(f"Google Form submitted via hidden iframe with {len(data)} fields.")
             return
-
 
         import urllib.request, threading
         body = urllib.parse.urlencode(data).encode("utf-8")
@@ -352,6 +349,7 @@ async def _post_form(data: dict):
                 log_error(f"Form submit error desktop: {e}")
 
         threading.Thread(target=_send, daemon=True).start()
+
     except Exception as e:
         log_error(f"Failed to submit form: {e}")
         traceback.print_exc()
