@@ -1425,8 +1425,8 @@ async def main_async():
                             btn_postquiz_next.handle_event(event)
                             if (btn_postquiz_next.selected and postquiz_reading_radio.selected is not None and postquiz_model_radio.selected is not None):
                                 btn_postquiz_next.selected = False
-                                td.postquiz_reading_feedback = POSTQUIZ_FEEDBACK_OPTS[postquiz_reading_radio.selected]
-                                td.postquiz_model_feedback = POSTQUIZ_FEEDBACK_OPTS[postquiz_model_radio.selected]
+                                td.postquiz_reading_feedback = POSTQUIZ_READING_FEEDBACK_OPTS[postquiz_reading_radio.selected]
+                                td.postquiz_model_feedback = POSTQUIZ_MODEL_FEEDBACK_OPTS[postquiz_model_radio.selected]
                                 asyncio.create_task(submit_full_session(
                                     td, mode, survey_origin, survey_familiarity_val))
                                 enter_free(from_quiz=True)
