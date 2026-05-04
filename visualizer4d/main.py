@@ -175,7 +175,7 @@ class TimingData:
         self.tutoanstime     = 0.0
         self.tuto_result     = ""
         self.redo_feedback   = ""    # pre-quiz redo feedback (survey)
-        self.postquiz_feedback = ""  # NEW: post-quiz experience feedback
+        self.postquiz_feedback = ""  # post-quiz experience feedback
         self.anatime         = [0.0] * TOTAL_QUIZ_QUESTIONS
         self.anstime         = [0.0] * TOTAL_QUIZ_QUESTIONS
         self.readtime        = [0.0, 0.0]
@@ -312,9 +312,6 @@ async def submit_full_session(td: TimingData, model: str,
         "tutoanatime":      str(td.tutoanatime),
         "tutoanstime":      str(td.tutoanstime),
         "model":            model,
-        # postquiz_feedback stored in the redo_feedback column (repurposed)
-        # or as a separate field; we append it to redo_feedback with a pipe
-        # so the sheet column still lines up.
         "postquiz_feedback": td.postquiz_feedback,
     }
     for i in range(TOTAL_QUIZ_QUESTIONS):
@@ -629,38 +626,38 @@ def render_interstitial_text(screen, text, font, big_font, small_font,
 def render_survey(screen, font, big_font, small_font,
                   WIDTH, HEIGHT,
                   survey_source_radio, survey_fam_radio,
-                  redo_feedback_radio, btn_survey_next,
+                  redo_section_enabled, redo_feedback_radio,
+                  btn_redo_toggle, btn_survey_next,
                   scroll_offset, SURVEY_SOURCES):
     """
     Two-column layout:
-      Left  column: Q1 (source) + redo feedback if Redo selected
+      Left  column: Q1 (source) + optional redo section (toggled by a button)
       Right column: Q2 (familiarity)
-    Both columns scroll together on a shared tall surface.
-    The Continue button is always pinned to the bottom strip.
+    The Continue button is pinned to the bottom strip (screen-space rect).
     Returns current max_scroll.
     """
     BTN_H      = btn_survey_next.rect.height + 32
     VIEWPORT_H = HEIGHT - BTN_H
 
-    PAD        = 40          # outer horizontal padding
-    GAP        = 36          # gap between columns
+    PAD        = 40
+    GAP        = 36
     COL_W      = (WIDTH - PAD * 2 - GAP) // 2
     LEFT_X     = PAD
     RIGHT_X    = PAD + COL_W + GAP
     LABEL_H    = font.get_height() + 8
-    TOP_PAD    = 56          # space for title
-    GAP_SECT   = 24
-
-    is_redo = (survey_source_radio.selected == 4)   # index of "Redo"
+    TOP_PAD    = 56
+    GAP_SECT   = 20
 
     # --- compute column heights ---
-    left_h  = LABEL_H + survey_source_radio.total_height()
-    if is_redo:
+    left_h = LABEL_H + survey_source_radio.total_height()
+    # Redo toggle button
+    left_h += GAP_SECT + btn_redo_toggle.rect.height
+    if redo_section_enabled:
         left_h += GAP_SECT + LABEL_H + redo_feedback_radio.total_height()
     right_h = LABEL_H + survey_fam_radio.total_height()
 
     col_bottom = TOP_PAD + max(left_h, right_h)
-    total_h    = col_bottom + 30   # small bottom pad
+    total_h    = col_bottom + 30
 
     # --- build content surface ---
     surf_h  = max(total_h, VIEWPORT_H)
@@ -672,7 +669,6 @@ def render_survey(screen, font, big_font, small_font,
     content.blit(t, (WIDTH // 2 - t.get_width() // 2, 14))
 
     # ---- LEFT column ----
-    # Q1 label + radio
     q1_lbl = font.render("How did you hear about this study?", True, (200, 220, 255))
     content.blit(q1_lbl, (LEFT_X, TOP_PAD))
     survey_source_radio.x = LEFT_X
@@ -680,14 +676,19 @@ def render_survey(screen, font, big_font, small_font,
     survey_source_radio.w = COL_W
     survey_source_radio.draw(content, font)
 
-    # Redo feedback — below Q1 in the left column
-    redo_y = TOP_PAD + LABEL_H + survey_source_radio.total_height() + GAP_SECT
-    if is_redo:
-        redo_lbl = font.render(
-            "How did the reading material affect you?", True, (255, 220, 120))
-        content.blit(redo_lbl, (LEFT_X, redo_y))
+    # Redo toggle button — position on content surface
+    redo_toggle_y = TOP_PAD + LABEL_H + survey_source_radio.total_height() + GAP_SECT
+    # We store the content-space rect for hit-testing (adjusted by scroll in event handler)
+    btn_redo_toggle.rect.x = LEFT_X
+    btn_redo_toggle.rect.y = redo_toggle_y
+    btn_redo_toggle.draw(content, small_font)
+
+    if redo_section_enabled:
+        redo_q_y = redo_toggle_y + btn_redo_toggle.rect.height + GAP_SECT
+        redo_lbl = font.render("How did the reading material affect you?", True, (255, 220, 120))
+        content.blit(redo_lbl, (LEFT_X, redo_q_y))
         redo_feedback_radio.x = LEFT_X
-        redo_feedback_radio.y = redo_y + LABEL_H
+        redo_feedback_radio.y = redo_q_y + LABEL_H
         redo_feedback_radio.w = COL_W
         redo_feedback_radio.draw(content, font)
 
@@ -702,10 +703,12 @@ def render_survey(screen, font, big_font, small_font,
     # Validation hint
     source_ok = survey_source_radio.selected is not None
     fam_ok    = survey_fam_radio.selected is not None
-    redo_ok   = (not is_redo or redo_feedback_radio.selected is not None)
+    redo_ok   = (not redo_section_enabled or redo_feedback_radio.selected is not None)
     if not (source_ok and fam_ok and redo_ok):
-        hint_str = ("Please answer all questions to continue."
-                    if is_redo else "Please answer both questions to continue.")
+        if redo_section_enabled and not redo_ok:
+            hint_str = "Please answer all questions to continue."
+        else:
+            hint_str = "Please answer both questions to continue."
         hint = small_font.render(hint_str, True, (255, 180, 80))
         content.blit(hint, (WIDTH // 2 - hint.get_width() // 2, col_bottom + 4))
 
@@ -727,15 +730,22 @@ def render_survey(screen, font, big_font, small_font,
             hint2 = small_font.render("scroll for more ↓", True, (200, 200, 100))
             screen.blit(hint2, (WIDTH // 2 - hint2.get_width() // 2, VIEWPORT_H - 28))
 
-    # --- pinned bottom strip with Continue button ---
+    # --- pinned bottom strip: Continue button in SCREEN SPACE ---
+    strip_y = VIEWPORT_H
     strip = pygame.Surface((WIDTH, BTN_H))
     strip.fill((5, 5, 5))
     pygame.draw.line(strip, (60, 60, 80), (0, 0), (WIDTH, 0), 1)
-    orig = btn_survey_next.rect.topleft
-    btn_survey_next.rect.topleft = (WIDTH // 2 - btn_survey_next.rect.width // 2, 8)
+    # Draw the button on the strip surface at local coords, but keep rect in screen space
+    btn_cx = WIDTH // 2 - btn_survey_next.rect.width // 2
+    btn_cy_strip = 8   # local y on the strip
+    # Update the rect to screen-space so handle_event works correctly
+    btn_survey_next.rect.topleft = (btn_cx, strip_y + btn_cy_strip)
+    # Draw offset onto strip
+    saved_topleft = btn_survey_next.rect.topleft
+    btn_survey_next.rect.topleft = (btn_cx, btn_cy_strip)
     btn_survey_next.draw(strip, font)
-    btn_survey_next.rect.topleft = orig
-    screen.blit(strip, (0, VIEWPORT_H))
+    btn_survey_next.rect.topleft = saved_topleft   # restore screen-space rect
+    screen.blit(strip, (0, strip_y))
 
     return max_scroll
 
@@ -746,10 +756,6 @@ def render_survey(screen, font, big_font, small_font,
 def render_postquiz(screen, font, big_font, small_font,
                     WIDTH, HEIGHT,
                     postquiz_radio, btn_postquiz_next):
-    """
-    Full-screen post-quiz experience question before entering free mode.
-    Returns True when the user has answered and clicked Continue.
-    """
     screen.fill((5, 5, 5))
 
     title = big_font.render("One last question before free exploration", True, (255, 220, 80))
@@ -760,14 +766,12 @@ def render_postquiz(screen, font, big_font, small_font,
         True, (200, 220, 255))
     screen.blit(q_lbl, (WIDTH // 2 - q_lbl.get_width() // 2, 100))
 
-    # Centre the radio group
     rg_w  = min(420, WIDTH - 80)
     postquiz_radio.w = rg_w
     postquiz_radio.x = WIDTH // 2 - rg_w // 2
     postquiz_radio.y = 138
     postquiz_radio.draw(screen, font)
 
-    # Continue button
     btn_postquiz_next.rect.topleft = (WIDTH // 2 - btn_postquiz_next.rect.width // 2,
                                        postquiz_radio.y + postquiz_radio.total_height() + 32)
     if postquiz_radio.selected is None:
@@ -801,7 +805,7 @@ async def main_async():
         # ------------------------------------------------------------------
         assigned_mode = "CellHl"
         mode          = assigned_mode
-        is_redo       = False   # set after survey; drives balancing exclusion
+        is_redo       = False
 
         async def fetch_balancing_counts():
             nonlocal assigned_mode, mode
@@ -821,13 +825,13 @@ async def main_async():
                         else ["Wireframe","WShells","CellHl"])
                 assigned_mode = mode = random.choice(pool)
 
-        # NOTE: balancing fetch is re-issued after survey so is_redo is known.
-        # Initial task is a placeholder that runs before survey completes.
         balancing_task = asyncio.create_task(fetch_balancing_counts())
 
         interstitial_text   = None
         interstitial_scroll = 0
         survey_scroll       = 0
+        # redo section toggle state
+        redo_section_enabled = False
         state               = "CONSENT"
 
         td = TimingData()
@@ -917,10 +921,8 @@ async def main_async():
         # ------------------------------------------------------------------
         # Survey widgets
         # ------------------------------------------------------------------
-        # "Redo" is at index 4; "DDS" at 5; "9470" at 6
         SURVEY_SOURCES = ["School", "Blog or article", "Friend / Referral",
-                          "Other", "Redo", "DDS", "9470"]
-        REDO_SOURCE_IDX = 4   # index of "Redo" in SURVEY_SOURCES
+                          "Other", "DDS", "9470"]
 
         SURVEY_FAMILIARITY_OPTS = [
             "1 - Never heard of it", "2 - Heard of it", "3 - Some reading",
@@ -943,10 +945,12 @@ async def main_async():
         survey_source_radio   = RadioGroup(SURVEY_SOURCES,         0, 0, w=300, h=36, gap=6)
         survey_fam_radio      = RadioGroup(SURVEY_FAMILIARITY_OPTS, 0, 0, w=300, h=36, gap=6)
         redo_feedback_radio   = RadioGroup(REDO_FEEDBACK_OPTS,      0, 0, w=300, h=36, gap=6)
-        # NEW: post-quiz feedback radio
         postquiz_radio        = RadioGroup(POSTQUIZ_FEEDBACK_OPTS,  0, 0, w=420, h=38, gap=8)
+
         btn_survey_next       = ToggleButton(0, 0, 200, 44, "Continue ->", (80,160,80))
         btn_postquiz_next     = ToggleButton(0, 0, 220, 44, "Enter Free Mode ->", (80,160,80))
+        # Redo toggle: sits on the content surface — label updates dynamically
+        btn_redo_toggle       = ToggleButton(0, 0, 240, 34, "I am a Redo participant", (80, 100, 160))
 
         btn_yes = ToggleButton(0,0,280,52,"Yes - I consent to participate",(70,170,70))
         btn_no  = ToggleButton(0,0,280,52,"No - take me to free exploration",(170,70,70))
@@ -1212,6 +1216,7 @@ async def main_async():
                         elif state=="SURVEY":
                             if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP,
                                               pygame.MOUSEMOTION):
+                                # Adjust position for scroll when hitting content-surface widgets
                                 adj_pos = (event.pos[0], event.pos[1] + survey_scroll)
                                 class _Adj:
                                     pass
@@ -1219,36 +1224,53 @@ async def main_async():
                                 adj.type = event.type
                                 adj.pos  = adj_pos
                                 if hasattr(event, 'button'): adj.button = event.button
+
                                 survey_source_radio.handle_event(adj)
                                 survey_fam_radio.handle_event(adj)
-                                if survey_source_radio.selected == REDO_SOURCE_IDX:
+
+                                # Redo toggle: btn_redo_toggle.rect is in content-space
+                                # (set during render). Hit-test with scroll-adjusted pos.
+                                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                                    if btn_redo_toggle.rect.collidepoint(adj_pos):
+                                        redo_section_enabled = not redo_section_enabled
+                                        btn_redo_toggle.label = (
+                                            "✓ Redo participant (click to undo)"
+                                            if redo_section_enabled
+                                            else "I am a Redo participant"
+                                        )
+                                        if not redo_section_enabled:
+                                            redo_feedback_radio.selected = None
+                                        ev_consumed = True
+
+                                if redo_section_enabled:
                                     redo_feedback_radio.handle_event(adj)
-                                btn_survey_next.handle_event(event)
+
                             elif event.type == pygame.MOUSEWHEEL:
                                 survey_scroll = max(0, survey_scroll - event.y * 30)
                                 ev_consumed = True
 
+                            # Continue button: rect is in SCREEN SPACE (set by render_survey)
+                            btn_survey_next.handle_event(event)
+
                             if btn_survey_next.selected:
-                                btn_survey_next.selected=False
+                                btn_survey_next.selected = False
                                 source_ok = survey_source_radio.selected is not None
                                 fam_ok    = survey_fam_radio.selected is not None
-                                cur_is_redo = (survey_source_radio.selected == REDO_SOURCE_IDX)
-                                redo_ok   = (not cur_is_redo or
+                                redo_ok   = (not redo_section_enabled or
                                              redo_feedback_radio.selected is not None)
                                 if source_ok and fam_ok and redo_ok:
-                                    nonlocal_src       = survey_source_radio.selected
-                                    survey_origin      = SURVEY_SOURCES[nonlocal_src]
+                                    survey_origin      = SURVEY_SOURCES[survey_source_radio.selected]
                                     survey_familiarity_val = survey_fam_radio.selected + 1
                                     survey_source      = survey_origin
                                     survey_familiarity = survey_familiarity_val
-                                    is_redo            = cur_is_redo
+                                    is_redo            = redo_section_enabled
 
-                                    if is_redo:
+                                    if is_redo and redo_feedback_radio.selected is not None:
                                         td.redo_feedback = REDO_FEEDBACK_OPTS[redo_feedback_radio.selected]
+
                                     td.mark_survey_done()
 
-                                    # Re-fetch balancing now that is_redo is known,
-                                    # so redo users never get WShells.
+                                    # Re-fetch balancing now that is_redo is known
                                     asyncio.create_task(fetch_balancing_counts())
 
                                     enter_tutorial()
@@ -1365,7 +1387,6 @@ async def main_async():
                             if btn_next.selected:
                                 btn_next.selected=False; question_index+=1
                                 if question_index>=TOTAL_QUIZ_QUESTIONS:
-                                    # Show post-quiz feedback before submitting / free mode
                                     state="POSTQUIZ"
                                     postquiz_radio.selected = None
                                     btn_postquiz_next.selected = False
@@ -1578,7 +1599,8 @@ async def main_async():
                             screen, font, big_font, small_font,
                             WIDTH, HEIGHT,
                             survey_source_radio, survey_fam_radio,
-                            redo_feedback_radio, btn_survey_next,
+                            redo_section_enabled, redo_feedback_radio,
+                            btn_redo_toggle, btn_survey_next,
                             survey_scroll, SURVEY_SOURCES,
                         )
 
