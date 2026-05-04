@@ -176,6 +176,7 @@ class TimingData:
         self.tuto_result     = ""
         self.redo_feedback   = ""    # pre-quiz redo feedback (survey)
         self.postquiz_feedback = ""  # post-quiz experience feedback
+        self.postquiz_model_feedback = "" # post-quiz visualisation/model feedback
         self.anatime         = [0.0] * TOTAL_QUIZ_QUESTIONS
         self.anstime         = [0.0] * TOTAL_QUIZ_QUESTIONS
         self.readtime        = [0.0, 0.0]
@@ -306,7 +307,7 @@ async def submit_full_session(td: TimingData, model: str,
         "action":           "submit",
         "origin":           origin,
         "familiarity":      str(familiarity),
-        "is_redo":          "true" if (td. redo_feedback or td.tutoanatime < 0) else "false",
+        "is_redo":          "true" if (td.redo_feedback or td.tutoanatime < 0) else "false",
         "redo_feedback":    td.redo_feedback,
         "tuto_result":      td.tuto_result,
         "pretime":          str(td.pretime),
@@ -314,7 +315,8 @@ async def submit_full_session(td: TimingData, model: str,
         "tutoanatime":      str(td.tutoanatime),
         "tutoanstime":      str(td.tutoanstime),
         "model":            model,
-        "postquiz_feedback": td.postquiz_feedback,
+        "postquiz_reading_feedback": td.postquiz_reading_feedback,
+        "postquiz_model_feedback": td.postquiz_model_feedback,
     }
     for i in range(TOTAL_QUIZ_QUESTIONS):
         params[f"anatime_{i+1}"]  = str(td.anatime[i])
@@ -757,29 +759,39 @@ def render_survey(screen, font, big_font, small_font,
 # ============================================================
 def render_postquiz(screen, font, big_font, small_font,
                     WIDTH, HEIGHT,
-                    postquiz_radio, btn_postquiz_next):
+                    postquiz_reading_radio, postquiz_model_radio, btn_postquiz_next):
     screen.fill((5, 5, 5))
 
-    title = big_font.render("One last question before free exploration", True, (255, 220, 80))
+    title = big_font.render("Two last questions before free exploration", True, (255, 220, 80))
     screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 40))
 
-    q_lbl = font.render(
-        "Overall, how would you rate your experience with this visualisation?",
+    rg_w = min(460, WIDTH - 80)
+
+    q1_lbl = font.render("How did the reading material affect you?", True, (200, 220, 255))
+    screen.blit(q1_lbl, (WIDTH // 2 - q1_lbl.get_width() // 2, 96))
+    postquiz_reading_radio.w = rg_w
+    postquiz_reading_radio.x = WIDTH // 2 - rg_w // 2
+    postquiz_reading_radio.y = 130
+    postquiz_reading_radio.draw(screen, font)
+
+    q2_y = postquiz_reading_radio.y + postquiz_reading_radio.total_height() + 34
+    q2_lbl = font.render(
+        "Overall, how would you rate your experience with this visualisation model?",
         True, (200, 220, 255))
-    screen.blit(q_lbl, (WIDTH // 2 - q_lbl.get_width() // 2, 100))
+    screen.blit(q2_lbl, (WIDTH // 2 - q2_lbl.get_width() // 2, q2_y))
+    postquiz_model_radio.w = rg_w
+    postquiz_model_radio.x = WIDTH // 2 - rg_w // 2
+    postquiz_model_radio.y = q2_y + 34
+    postquiz_model_radio.draw(screen, font)
 
-    rg_w  = min(420, WIDTH - 80)
-    postquiz_radio.w = rg_w
-    postquiz_radio.x = WIDTH // 2 - rg_w // 2
-    postquiz_radio.y = 138
-    postquiz_radio.draw(screen, font)
-
-    btn_postquiz_next.rect.topleft = (WIDTH // 2 - btn_postquiz_next.rect.width // 2,
-                                       postquiz_radio.y + postquiz_radio.total_height() + 32)
-    if postquiz_radio.selected is None:
-        hint = small_font.render("Please select an option to continue.", True, (255, 180, 80))
+    btn_postquiz_next.rect.topleft = (
+        WIDTH // 2 - btn_postquiz_next.rect.width // 2,
+        postquiz_model_radio.y + postquiz_model_radio.total_height() + 28
+    )
+    if postquiz_reading_radio.selected is None or postquiz_model_radio.selected is None:
+        hint = small_font.render("Please answer both questions to continue.", True, (255, 180, 80))
         screen.blit(hint, (WIDTH // 2 - hint.get_width() // 2,
-                            btn_postquiz_next.rect.y - 22))
+                           btn_postquiz_next.rect.y - 22))
     btn_postquiz_next.draw(screen, font)
 
 
@@ -938,12 +950,21 @@ async def main_async():
              "Confused me further",
         ]
         REDO_FEEDBACK_OPTS = FEEDBACK_OPTS
-        POSTQUIZ_FEEDBACK_OPTS = FEEDBACK_OPTS
+        POSTQUIZ_READING_FEEDBACK_OPTS = FEEDBACK_OPTS
+        POSTQUIZ_MODEL_FEEDBACK_OPTS = [
+            "Very clear and intuitive",
+            "Mostly clear",
+            "Neutral / unsure",
+            "Somewhat confusing",
+            "Very confusing"
+        ]
 
         survey_source_radio   = RadioGroup(SURVEY_SOURCES,         0, 0, w=300, h=36, gap=6)
         survey_fam_radio      = RadioGroup(SURVEY_FAMILIARITY_OPTS, 0, 0, w=300, h=36, gap=6)
         redo_feedback_radio   = RadioGroup(REDO_FEEDBACK_OPTS,      0, 0, w=300, h=36, gap=6)
-        postquiz_radio        = RadioGroup(POSTQUIZ_FEEDBACK_OPTS,  0, 0, w=420, h=38, gap=8)
+        postquiz_reading_radio        = RadioGroup(POSTQUIZ_READING_FEEDBACK_OPTS,  0, 0, w=420, h=38, gap=8)
+        postquiz_model_radio        = RadioGroup(POSTQUIZ_MODEL_FEEDBACK_OPTS,  0, 0, w=420, h=38, gap=8)
+        
 
         btn_survey_next       = ToggleButton(0, 0, 200, 44, "Continue ->", (80,160,80))
         btn_postquiz_next     = ToggleButton(0, 0, 220, 44, "Enter Free Mode ->", (80,160,80))
@@ -1386,7 +1407,8 @@ async def main_async():
                                 btn_next.selected=False; question_index+=1
                                 if question_index>=TOTAL_QUIZ_QUESTIONS:
                                     state="POSTQUIZ"
-                                    postquiz_radio.selected = None
+                                    postquiz_reading_radio.selected = None
+                                    postquiz_model_radio.selected = None
                                     btn_postquiz_next.selected = False
                                 elif question_index%5==0:
                                     state="INTERSTITIAL"; interstitial_text=None
@@ -1398,11 +1420,13 @@ async def main_async():
 
                         # ---- POST-QUIZ FEEDBACK ----
                         elif state=="POSTQUIZ":
-                            postquiz_radio.handle_event(event)
+                            postquiz_reading_radio.handle_event(event)
+                            postquiz_model_radio.handle_event(event)
                             btn_postquiz_next.handle_event(event)
-                            if btn_postquiz_next.selected and postquiz_radio.selected is not None:
+                            if (btn_postquiz_next.selected and postquiz_reading_radio.selected is not None and postquiz_model_radio.selected is not None):
                                 btn_postquiz_next.selected = False
-                                td.postquiz_feedback = POSTQUIZ_FEEDBACK_OPTS[postquiz_radio.selected]
+                                td.postquiz_reading_feedback = POSTQUIZ_FEEDBACK_OPTS[postquiz_radio.selected]
+                                td.postquiz_model_feedback = POSTQUIZ_FEEDBACK_OPTS[postquiz_radio.selected]
                                 asyncio.create_task(submit_full_session(
                                     td, mode, survey_origin, survey_familiarity_val))
                                 enter_free(from_quiz=True)
@@ -1750,7 +1774,7 @@ async def main_async():
                     # ---- POST-QUIZ FEEDBACK ----
                     elif state=="POSTQUIZ":
                         render_postquiz(screen, font, big_font, small_font,
-                                        WIDTH, HEIGHT, postquiz_radio, btn_postquiz_next)
+                                        WIDTH, HEIGHT, postquiz_reading_radio, postquiz_model_radio, btn_postquiz_next)
 
                     # ---- FREE MODE ----
                     elif state=="FREE_MODE":
