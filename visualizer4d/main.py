@@ -806,7 +806,7 @@ async def main_async():
 
         WIDTH, HEIGHT = 1200, 800
         screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
-        pygame.display.set_caption("4D Axis Quiz Platform")
+        pygame.display.set_caption("4D Visualization Quiz Platform")
 
         clock      = pygame.time.Clock()
         font       = pygame.font.SysFont(None, 24)
@@ -1425,8 +1425,8 @@ async def main_async():
                             btn_postquiz_next.handle_event(event)
                             if (btn_postquiz_next.selected and postquiz_reading_radio.selected is not None and postquiz_model_radio.selected is not None):
                                 btn_postquiz_next.selected = False
-                                td.postquiz_reading_feedback = POSTQUIZ_FEEDBACK_OPTS[postquiz_radio.selected]
-                                td.postquiz_model_feedback = POSTQUIZ_FEEDBACK_OPTS[postquiz_radio.selected]
+                                td.postquiz_reading_feedback = POSTQUIZ_FEEDBACK_OPTS[postquiz_reading_radio.selected]
+                                td.postquiz_model_feedback = POSTQUIZ_FEEDBACK_OPTS[postquiz_model_radio.selected]
                                 asyncio.create_task(submit_full_session(
                                     td, mode, survey_origin, survey_familiarity_val))
                                 enter_free(from_quiz=True)
