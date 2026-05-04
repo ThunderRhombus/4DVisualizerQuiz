@@ -118,9 +118,14 @@ def log_error(msg):  print(f"[4D-ERROR] {msg}", file=sys.stderr)
 
 
 # ============================================================
-# Apps Script URL  — single endpoint for both assign and submit
+# Apps Script URL — single endpoint for both assign and submit
 # ============================================================
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxn36iA-c-LsH8PXuRkAFV8-igNRG2XxAekVFVSSZxNkGSkDsjDQfpGg9_VB8ApdU9vNA/exec"
+
+# REDO encoding: tutoanatime is stored as a NEGATIVE value for redo participants.
+# The Apps Script / analysis code can detect is_redo by checking tutoanatime < 0.
+# Actual tutoanatime magnitude is preserved (negated).
+REDO_TUTOANATIME_SENTINEL = True   # flip sign of tutoanatime for redo users
 
 
 def _is_valid_script_url(url):
@@ -131,7 +136,12 @@ def _is_valid_script_url(url):
     )
 
 
-def _parse_balancing_mode(text):
+def _parse_balancing_mode(text, exclude_wshells=False):
+    """
+    Parse the CSV balancing response.
+    If exclude_wshells=True (redo participants), pick the least-used mode
+    among Wireframe and CellHl only.
+    """
     line = text.strip().strip('"\'').splitlines()[0].strip().strip('"\'')
     parts = [p.strip().strip('"\'') for p in line.split(",")]
     log_debug(f"Balancing CSV parts: {parts}")
@@ -141,9 +151,16 @@ def _parse_balancing_mode(text):
         w_cnt, s_cnt, c_cnt = int(parts[0]), int(parts[1]), int(parts[2])
     else:
         raise ValueError(f"Expected 3 or 5+ CSV fields, got {len(parts)}: {parts}")
-    counts = sorted([(w_cnt,"Wireframe"),(s_cnt,"WShells"),(c_cnt,"CellHl")])
-    chosen = counts[0][1]
-    log_debug(f"Balancing success: W={w_cnt}, S={s_cnt}, C={c_cnt} -> {chosen}")
+
+    if exclude_wshells:
+        # Redo participants never get WShells; pick least-used of W/C
+        counts = sorted([(w_cnt,"Wireframe"),(c_cnt,"CellHl")])
+        chosen = counts[0][1]
+        log_debug(f"Balancing (redo, no WShells): W={w_cnt}, C={c_cnt} -> {chosen}")
+    else:
+        counts = sorted([(w_cnt,"Wireframe"),(s_cnt,"WShells"),(c_cnt,"CellHl")])
+        chosen = counts[0][1]
+        log_debug(f"Balancing: W={w_cnt}, S={s_cnt}, C={c_cnt} -> {chosen}")
     return chosen
 
 
@@ -152,24 +169,25 @@ def _parse_balancing_mode(text):
 # ============================================================
 class TimingData:
     def __init__(self):
-        self.session_start = time.time()
-        self.pretime       = 0.0
-        self.tutoanatime   = 0.0
-        self.tutoanstime   = 0.0
-        self.tuto_result   = ""
-        self.redo_feedback = ""          # NEW: populated for Redo participants
-        self.anatime       = [0.0] * TOTAL_QUIZ_QUESTIONS
-        self.anstime       = [0.0] * TOTAL_QUIZ_QUESTIONS
-        self.readtime      = [0.0, 0.0]
-        self.options       = [""] * TOTAL_QUIZ_QUESTIONS
-        self.acc           = [""] * TOTAL_QUIZ_QUESTIONS
-        self.choice        = [""] * TOTAL_QUIZ_QUESTIONS
-        self._ana_start    = None
-        self._ans_start    = None
-        self._tutoana_start= None
-        self._tutoans_start= None
-        self._read_start   = None
-        self._read_idx     = None
+        self.session_start   = time.time()
+        self.pretime         = 0.0
+        self.tutoanatime     = 0.0   # negated for redo users (see encode_redo)
+        self.tutoanstime     = 0.0
+        self.tuto_result     = ""
+        self.redo_feedback   = ""    # pre-quiz redo feedback (survey)
+        self.postquiz_feedback = ""  # NEW: post-quiz experience feedback
+        self.anatime         = [0.0] * TOTAL_QUIZ_QUESTIONS
+        self.anstime         = [0.0] * TOTAL_QUIZ_QUESTIONS
+        self.readtime        = [0.0, 0.0]
+        self.options         = [""] * TOTAL_QUIZ_QUESTIONS
+        self.acc             = [""] * TOTAL_QUIZ_QUESTIONS
+        self.choice          = [""] * TOTAL_QUIZ_QUESTIONS
+        self._ana_start      = None
+        self._ans_start      = None
+        self._tutoana_start  = None
+        self._tutoans_start  = None
+        self._read_start     = None
+        self._read_idx       = None
 
     def mark_survey_done(self):
         self.pretime = round(time.time() - self.session_start, 2)
@@ -178,6 +196,13 @@ class TimingData:
     def end_tuto_ana(self):
         if self._tutoana_start:
             self.tutoanatime = round(time.time() - self._tutoana_start, 2)
+
+    def encode_redo(self):
+        """Negate tutoanatime to encode redo presence. Safe to call multiple times."""
+        if self.tutoanatime > 0:
+            self.tutoanatime = -self.tutoanatime
+        elif self.tutoanatime == 0:
+            self.tutoanatime = -0.001  # sentinel for zero-duration edge case
 
     def start_tuto_ans(self):  self._tutoans_start = time.time()
     def end_tuto_ans(self):
@@ -205,18 +230,10 @@ class TimingData:
 
     def record_answer(self, qi, chosen_label, is_correct, is_idk,
                       shape_name="", chosen_a4=None, correct_a4=None, correct_idx=None):
-        """
-        options encoding:
-          if correct:  "<shape>|correct:(<x>,<y>,<z>)|picked=O<n>"
-          if idk:      "<shape>|correct:(<x>,<y>,<z>)|picked=IDK"
-          if wrong:    "<shape>|correct:(<x>,<y>,<z>)|wrong_a4:(<x>,<y>,<z>)|picked=O<n>"
-        """
         def fmt3(t):
             if t is None: return "none"
             return f"({t[0]:.3f},{t[1]:.3f},{t[2]:.3f})"
-
         correct_str = f"correct:{fmt3(correct_a4)}"
-
         if is_idk:
             self.options[qi] = f"{shape_name}|{correct_str}|picked=IDK"
             self.choice[qi]  = chosen_label
@@ -237,11 +254,6 @@ class TimingData:
 # ============================================================
 
 async def _get_request(url: str) -> str | None:
-    """
-    Fire a GET request and return the response body as a string.
-    Works in both emscripten (JS fetch) and desktop (urllib).
-    Returns None on failure.
-    """
     try:
         if sys.platform == "emscripten":
             from js import window
@@ -254,7 +266,7 @@ async def _get_request(url: str) -> str | None:
                     .then(function(t) {{ window["{result_key}"] = t || "__EMPTY__"; }})
                     .catch(function(e) {{ window["{result_key}"] = "__FETCH_ERROR__:" + e; }});
             """)
-            for _ in range(100):   # up to 10 s
+            for _ in range(100):
                 raw = str(window.eval(f'window["{result_key}"] || ""'))
                 if raw:
                     log_debug(f"GET result ({url[:60]}): {raw[:120]}")
@@ -285,21 +297,25 @@ async def _fetch_balancing_text():
 
 async def submit_full_session(td: TimingData, model: str,
                                origin: str, familiarity: int):
-    """Build a GET URL with all session data and fire it at the Apps Script."""
     if not _is_valid_script_url(APPS_SCRIPT_URL):
         log_error("submit_full_session: invalid Apps Script URL")
         return
 
     params = {
-        "action":        "submit",
-        "origin":        origin,
-        "familiarity":   str(familiarity),
-        "redo_feedback": td.redo_feedback,
-        "tuto_result":   td.tuto_result,
-        "pretime":       str(td.pretime),
-        "tutoanatime":   str(td.tutoanatime),
-        "tutoanstime":   str(td.tutoanstime),
-        "model":         model,
+        "action":           "submit",
+        "origin":           origin,
+        "familiarity":      str(familiarity),
+        "redo_feedback":    td.redo_feedback,
+        "tuto_result":      td.tuto_result,
+        "pretime":          str(td.pretime),
+        # tutoanatime is negative for redo users — encodes redo flag
+        "tutoanatime":      str(td.tutoanatime),
+        "tutoanstime":      str(td.tutoanstime),
+        "model":            model,
+        # postquiz_feedback stored in the redo_feedback column (repurposed)
+        # or as a separate field; we append it to redo_feedback with a pipe
+        # so the sheet column still lines up.
+        "postquiz_feedback": td.postquiz_feedback,
     }
     for i in range(TOTAL_QUIZ_QUESTIONS):
         params[f"anatime_{i+1}"]  = str(td.anatime[i])
@@ -608,6 +624,160 @@ def render_interstitial_text(screen, text, font, big_font, small_font,
 
 
 # ============================================================
+# Survey renderer — side-by-side two-column layout with scroll
+# ============================================================
+def render_survey(screen, font, big_font, small_font,
+                  WIDTH, HEIGHT,
+                  survey_source_radio, survey_fam_radio,
+                  redo_feedback_radio, btn_survey_next,
+                  scroll_offset, SURVEY_SOURCES):
+    """
+    Two-column layout:
+      Left  column: Q1 (source) + redo feedback if Redo selected
+      Right column: Q2 (familiarity)
+    Both columns scroll together on a shared tall surface.
+    The Continue button is always pinned to the bottom strip.
+    Returns current max_scroll.
+    """
+    BTN_H      = btn_survey_next.rect.height + 32
+    VIEWPORT_H = HEIGHT - BTN_H
+
+    PAD        = 40          # outer horizontal padding
+    GAP        = 36          # gap between columns
+    COL_W      = (WIDTH - PAD * 2 - GAP) // 2
+    LEFT_X     = PAD
+    RIGHT_X    = PAD + COL_W + GAP
+    LABEL_H    = font.get_height() + 8
+    TOP_PAD    = 56          # space for title
+    GAP_SECT   = 24
+
+    is_redo = (survey_source_radio.selected == 4)   # index of "Redo"
+
+    # --- compute column heights ---
+    left_h  = LABEL_H + survey_source_radio.total_height()
+    if is_redo:
+        left_h += GAP_SECT + LABEL_H + redo_feedback_radio.total_height()
+    right_h = LABEL_H + survey_fam_radio.total_height()
+
+    col_bottom = TOP_PAD + max(left_h, right_h)
+    total_h    = col_bottom + 30   # small bottom pad
+
+    # --- build content surface ---
+    surf_h  = max(total_h, VIEWPORT_H)
+    content = pygame.Surface((WIDTH, surf_h))
+    content.fill((5, 5, 5))
+
+    # Title
+    t = big_font.render("A couple of quick questions before we begin", True, (220, 220, 255))
+    content.blit(t, (WIDTH // 2 - t.get_width() // 2, 14))
+
+    # ---- LEFT column ----
+    # Q1 label + radio
+    q1_lbl = font.render("How did you hear about this study?", True, (200, 220, 255))
+    content.blit(q1_lbl, (LEFT_X, TOP_PAD))
+    survey_source_radio.x = LEFT_X
+    survey_source_radio.y = TOP_PAD + LABEL_H
+    survey_source_radio.w = COL_W
+    survey_source_radio.draw(content, font)
+
+    # Redo feedback — below Q1 in the left column
+    redo_y = TOP_PAD + LABEL_H + survey_source_radio.total_height() + GAP_SECT
+    if is_redo:
+        redo_lbl = font.render(
+            "How did the reading material affect you?", True, (255, 220, 120))
+        content.blit(redo_lbl, (LEFT_X, redo_y))
+        redo_feedback_radio.x = LEFT_X
+        redo_feedback_radio.y = redo_y + LABEL_H
+        redo_feedback_radio.w = COL_W
+        redo_feedback_radio.draw(content, font)
+
+    # ---- RIGHT column ----
+    q2_lbl = font.render("Familiarity with 4D geometry / polytopes?", True, (200, 220, 255))
+    content.blit(q2_lbl, (RIGHT_X, TOP_PAD))
+    survey_fam_radio.x = RIGHT_X
+    survey_fam_radio.y = TOP_PAD + LABEL_H
+    survey_fam_radio.w = COL_W
+    survey_fam_radio.draw(content, font)
+
+    # Validation hint
+    source_ok = survey_source_radio.selected is not None
+    fam_ok    = survey_fam_radio.selected is not None
+    redo_ok   = (not is_redo or redo_feedback_radio.selected is not None)
+    if not (source_ok and fam_ok and redo_ok):
+        hint_str = ("Please answer all questions to continue."
+                    if is_redo else "Please answer both questions to continue.")
+        hint = small_font.render(hint_str, True, (255, 180, 80))
+        content.blit(hint, (WIDTH // 2 - hint.get_width() // 2, col_bottom + 4))
+
+    # --- scroll clamp ---
+    max_scroll = max(0, total_h - VIEWPORT_H)
+    scroll_offset = max(0, min(scroll_offset, max_scroll))
+
+    # --- blit viewport ---
+    screen.blit(content, (0, 0), (0, scroll_offset, WIDTH, VIEWPORT_H))
+
+    # --- scrollbar ---
+    if max_scroll > 0:
+        track_h = VIEWPORT_H - 20
+        thumb_h = max(30, int(track_h * VIEWPORT_H / total_h))
+        thumb_y = int((scroll_offset / max_scroll) * (track_h - thumb_h)) + 10
+        pygame.draw.rect(screen, (60, 60, 80),   (WIDTH - 12, 10, 6, track_h), border_radius=3)
+        pygame.draw.rect(screen, (140, 160, 220), (WIDTH - 12, thumb_y, 6, thumb_h), border_radius=3)
+        if scroll_offset < max_scroll - 10:
+            hint2 = small_font.render("scroll for more ↓", True, (200, 200, 100))
+            screen.blit(hint2, (WIDTH // 2 - hint2.get_width() // 2, VIEWPORT_H - 28))
+
+    # --- pinned bottom strip with Continue button ---
+    strip = pygame.Surface((WIDTH, BTN_H))
+    strip.fill((5, 5, 5))
+    pygame.draw.line(strip, (60, 60, 80), (0, 0), (WIDTH, 0), 1)
+    orig = btn_survey_next.rect.topleft
+    btn_survey_next.rect.topleft = (WIDTH // 2 - btn_survey_next.rect.width // 2, 8)
+    btn_survey_next.draw(strip, font)
+    btn_survey_next.rect.topleft = orig
+    screen.blit(strip, (0, VIEWPORT_H))
+
+    return max_scroll
+
+
+# ============================================================
+# Post-quiz feedback renderer
+# ============================================================
+def render_postquiz(screen, font, big_font, small_font,
+                    WIDTH, HEIGHT,
+                    postquiz_radio, btn_postquiz_next):
+    """
+    Full-screen post-quiz experience question before entering free mode.
+    Returns True when the user has answered and clicked Continue.
+    """
+    screen.fill((5, 5, 5))
+
+    title = big_font.render("One last question before free exploration", True, (255, 220, 80))
+    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 40))
+
+    q_lbl = font.render(
+        "Overall, how would you rate your experience with this visualisation?",
+        True, (200, 220, 255))
+    screen.blit(q_lbl, (WIDTH // 2 - q_lbl.get_width() // 2, 100))
+
+    # Centre the radio group
+    rg_w  = min(420, WIDTH - 80)
+    postquiz_radio.w = rg_w
+    postquiz_radio.x = WIDTH // 2 - rg_w // 2
+    postquiz_radio.y = 138
+    postquiz_radio.draw(screen, font)
+
+    # Continue button
+    btn_postquiz_next.rect.topleft = (WIDTH // 2 - btn_postquiz_next.rect.width // 2,
+                                       postquiz_radio.y + postquiz_radio.total_height() + 32)
+    if postquiz_radio.selected is None:
+        hint = small_font.render("Please select an option to continue.", True, (255, 180, 80))
+        screen.blit(hint, (WIDTH // 2 - hint.get_width() // 2,
+                            btn_postquiz_next.rect.y - 22))
+    btn_postquiz_next.draw(screen, font)
+
+
+# ============================================================
 # Main
 # ============================================================
 async def main_async():
@@ -630,26 +800,34 @@ async def main_async():
         # Session
         # ------------------------------------------------------------------
         assigned_mode = "CellHl"
-        mode = assigned_mode
+        mode          = assigned_mode
+        is_redo       = False   # set after survey; drives balancing exclusion
 
         async def fetch_balancing_counts():
             nonlocal assigned_mode, mode
             try:
                 text = await _fetch_balancing_text()
                 if not text:
-                    assigned_mode = mode = random.choice(["Wireframe", "WShells", "CellHl"])
+                    pool = (["Wireframe","CellHl"] if is_redo
+                            else ["Wireframe","WShells","CellHl"])
+                    assigned_mode = mode = random.choice(pool)
                     log_debug(f"Balancing unavailable; random fallback -> {mode}")
                     return
-                assigned_mode = mode = _parse_balancing_mode(text)
+                assigned_mode = mode = _parse_balancing_mode(text, exclude_wshells=is_redo)
             except Exception as e:
                 log_debug(f"Balancing failed: {e}")
                 traceback.print_exc()
-                assigned_mode = mode = random.choice(["Wireframe", "WShells", "CellHl"])
+                pool = (["Wireframe","CellHl"] if is_redo
+                        else ["Wireframe","WShells","CellHl"])
+                assigned_mode = mode = random.choice(pool)
 
+        # NOTE: balancing fetch is re-issued after survey so is_redo is known.
+        # Initial task is a placeholder that runs before survey completes.
         balancing_task = asyncio.create_task(fetch_balancing_counts())
 
         interstitial_text   = None
         interstitial_scroll = 0
+        survey_scroll       = 0
         state               = "CONSENT"
 
         td = TimingData()
@@ -658,7 +836,6 @@ async def main_async():
         survey_familiarity_val = 1
         survey_source          = None
         survey_familiarity     = None
-        is_redo                = False   # NEW
 
         tutorial_sub           = "WATCH"
         tutorial_angle         = 0.0
@@ -740,24 +917,36 @@ async def main_async():
         # ------------------------------------------------------------------
         # Survey widgets
         # ------------------------------------------------------------------
-        # NEW: "Redo" added as 5th source option
-        SURVEY_SOURCES = ["School", "Blog or article", "Friend / Referral", "Other", "Redo"]
+        # "Redo" is at index 4; "DDS" at 5; "9470" at 6
+        SURVEY_SOURCES = ["School", "Blog or article", "Friend / Referral",
+                          "Other", "Redo", "DDS", "9470"]
+        REDO_SOURCE_IDX = 4   # index of "Redo" in SURVEY_SOURCES
+
         SURVEY_FAMILIARITY_OPTS = [
             "1 - Never heard of it", "2 - Heard of it", "3 - Some reading",
             "4 - Comfortable", "5 - Expert",
         ]
-        # NEW: redo feedback options
         REDO_FEEDBACK_OPTS = [
             "Helped significantly",
             "Helped somewhat",
             "Didn't help",
             "Confused me further",
         ]
+        POSTQUIZ_FEEDBACK_OPTS = [
+            "Very clear and intuitive",
+            "Mostly clear",
+            "Neutral / unsure",
+            "Somewhat confusing",
+            "Very confusing",
+        ]
 
-        survey_source_radio   = RadioGroup(SURVEY_SOURCES,        0, 0, w=300, h=42, gap=8)
-        survey_fam_radio      = RadioGroup(SURVEY_FAMILIARITY_OPTS,0, 0, w=300, h=42, gap=8)
-        redo_feedback_radio   = RadioGroup(REDO_FEEDBACK_OPTS,     0, 0, w=300, h=42, gap=8)  # NEW
+        survey_source_radio   = RadioGroup(SURVEY_SOURCES,         0, 0, w=300, h=36, gap=6)
+        survey_fam_radio      = RadioGroup(SURVEY_FAMILIARITY_OPTS, 0, 0, w=300, h=36, gap=6)
+        redo_feedback_radio   = RadioGroup(REDO_FEEDBACK_OPTS,      0, 0, w=300, h=36, gap=6)
+        # NEW: post-quiz feedback radio
+        postquiz_radio        = RadioGroup(POSTQUIZ_FEEDBACK_OPTS,  0, 0, w=420, h=38, gap=8)
         btn_survey_next       = ToggleButton(0, 0, 200, 44, "Continue ->", (80,160,80))
+        btn_postquiz_next     = ToggleButton(0, 0, 220, 44, "Enter Free Mode ->", (80,160,80))
 
         btn_yes = ToggleButton(0,0,280,52,"Yes - I consent to participate",(70,170,70))
         btn_no  = ToggleButton(0,0,280,52,"No - take me to free exploration",(170,70,70))
@@ -792,31 +981,6 @@ async def main_async():
         # ------------------------------------------------------------------
         # Layout helpers
         # ------------------------------------------------------------------
-        def layout_survey():
-            col_x = WIDTH // 2 - 150
-            q1_y  = 160
-            survey_source_radio.x = col_x
-            survey_source_radio.y = q1_y
-
-            q2_y = q1_y + survey_source_radio.total_height() + 50
-            survey_fam_radio.x = col_x
-            survey_fam_radio.y = q2_y
-
-            # Redo feedback appears below familiarity when Redo is selected
-            redo_y = q2_y + survey_fam_radio.total_height() + 50
-            redo_feedback_radio.x = col_x
-            redo_feedback_radio.y = redo_y
-
-            btn_y = redo_y + (redo_feedback_radio.total_height() + 30
-                              if survey_source_radio.selected == 4   # "Redo" index
-                              else survey_fam_radio.total_height() + 30 - redo_feedback_radio.total_height())
-            # Simpler: always place continue below the lowest visible widget
-            if survey_source_radio.selected == 4:
-                btn_y = redo_y + redo_feedback_radio.total_height() + 30
-            else:
-                btn_y = q2_y + survey_fam_radio.total_height() + 30
-            btn_survey_next.rect.topleft = (WIDTH // 2 - 100, btn_y)
-
         def layout_tutorial():
             btn_tutorial_ready.rect.topleft=(WIDTH//2-100, HEIGHT-100)
             total_w=3*200+2*30; bx=WIDTH//2-total_w//2
@@ -1010,7 +1174,7 @@ async def main_async():
         # Initial layouts
         # ------------------------------------------------------------------
         layout_quiz(); layout_free(); layout_consent()
-        layout_survey(); layout_tutorial()
+        layout_tutorial()
 
         # ==================================================================
         # Main loop
@@ -1036,7 +1200,7 @@ async def main_async():
                             xsens=WIDTH/180; ysens=HEIGHT/180
                             for r in renderers.values(): r.WIDTH=WIDTH; r.HEIGHT=HEIGHT-300
                             layout_quiz(); layout_free(); layout_consent()
-                            layout_survey(); layout_tutorial()
+                            layout_tutorial()
 
                         # ---- CONSENT ----
                         if state=="CONSENT":
@@ -1046,28 +1210,47 @@ async def main_async():
 
                         # ---- SURVEY ----
                         elif state=="SURVEY":
-                            survey_source_radio.handle_event(event)
-                            survey_fam_radio.handle_event(event)
-                            # Only handle redo feedback radio when Redo is selected
-                            if survey_source_radio.selected == 4:
-                                redo_feedback_radio.handle_event(event)
-                            btn_survey_next.handle_event(event)
+                            if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP,
+                                              pygame.MOUSEMOTION):
+                                adj_pos = (event.pos[0], event.pos[1] + survey_scroll)
+                                class _Adj:
+                                    pass
+                                adj = _Adj()
+                                adj.type = event.type
+                                adj.pos  = adj_pos
+                                if hasattr(event, 'button'): adj.button = event.button
+                                survey_source_radio.handle_event(adj)
+                                survey_fam_radio.handle_event(adj)
+                                if survey_source_radio.selected == REDO_SOURCE_IDX:
+                                    redo_feedback_radio.handle_event(adj)
+                                btn_survey_next.handle_event(event)
+                            elif event.type == pygame.MOUSEWHEEL:
+                                survey_scroll = max(0, survey_scroll - event.y * 30)
+                                ev_consumed = True
+
                             if btn_survey_next.selected:
                                 btn_survey_next.selected=False
                                 source_ok = survey_source_radio.selected is not None
                                 fam_ok    = survey_fam_radio.selected is not None
-                                redo_ok   = (survey_source_radio.selected != 4 or
+                                cur_is_redo = (survey_source_radio.selected == REDO_SOURCE_IDX)
+                                redo_ok   = (not cur_is_redo or
                                              redo_feedback_radio.selected is not None)
                                 if source_ok and fam_ok and redo_ok:
-                                    nonlocal_src = survey_source_radio.selected
-                                    survey_origin          = SURVEY_SOURCES[nonlocal_src]
+                                    nonlocal_src       = survey_source_radio.selected
+                                    survey_origin      = SURVEY_SOURCES[nonlocal_src]
                                     survey_familiarity_val = survey_fam_radio.selected + 1
-                                    survey_source          = survey_origin
-                                    survey_familiarity     = survey_familiarity_val
-                                    is_redo                = (nonlocal_src == 4)
+                                    survey_source      = survey_origin
+                                    survey_familiarity = survey_familiarity_val
+                                    is_redo            = cur_is_redo
+
                                     if is_redo:
                                         td.redo_feedback = REDO_FEEDBACK_OPTS[redo_feedback_radio.selected]
                                     td.mark_survey_done()
+
+                                    # Re-fetch balancing now that is_redo is known,
+                                    # so redo users never get WShells.
+                                    asyncio.create_task(fetch_balancing_counts())
+
                                     enter_tutorial()
 
                         # ---- TUTORIAL ----
@@ -1096,7 +1279,11 @@ async def main_async():
                                 btn_tutorial_ready.handle_event(event)
                                 if btn_tutorial_ready.selected:
                                     btn_tutorial_ready.selected=False
-                                    td.end_tuto_ana(); td.start_tuto_ans()
+                                    td.end_tuto_ana()
+                                    # Encode redo flag into tutoanatime sign AFTER measuring
+                                    if is_redo:
+                                        td.encode_redo()
+                                    td.start_tuto_ans()
                                     tutorial_sub="ANSWER"
                             elif tutorial_sub=="ANSWER" and not tutorial_answered:
                                 for i,b in enumerate(tutorial_btns):
@@ -1146,7 +1333,6 @@ async def main_async():
                                     chosen_label = f"Option {i+1}"
                                     is_correct   = (i+1 == correct_idx)
                                     shape_name   = type(active_shape).__name__
-                                    # Chosen a4 is the variant the participant picked
                                     chosen_a4    = a4_variants[i+1]
                                     td.record_answer(
                                         question_index, chosen_label, is_correct, False,
@@ -1179,9 +1365,10 @@ async def main_async():
                             if btn_next.selected:
                                 btn_next.selected=False; question_index+=1
                                 if question_index>=TOTAL_QUIZ_QUESTIONS:
-                                    asyncio.create_task(submit_full_session(
-                                        td, mode, survey_origin, survey_familiarity_val))
-                                    enter_free(from_quiz=True)
+                                    # Show post-quiz feedback before submitting / free mode
+                                    state="POSTQUIZ"
+                                    postquiz_radio.selected = None
+                                    btn_postquiz_next.selected = False
                                 elif question_index%5==0:
                                     state="INTERSTITIAL"; interstitial_text=None
                                     interstitial_scroll = 0
@@ -1189,6 +1376,17 @@ async def main_async():
                                     if ri<len(td.readtime): td.start_read(ri)
                                 else:
                                     setup_question()
+
+                        # ---- POST-QUIZ FEEDBACK ----
+                        elif state=="POSTQUIZ":
+                            postquiz_radio.handle_event(event)
+                            btn_postquiz_next.handle_event(event)
+                            if btn_postquiz_next.selected and postquiz_radio.selected is not None:
+                                btn_postquiz_next.selected = False
+                                td.postquiz_feedback = POSTQUIZ_FEEDBACK_OPTS[postquiz_radio.selected]
+                                asyncio.create_task(submit_full_session(
+                                    td, mode, survey_origin, survey_familiarity_val))
+                                enter_free(from_quiz=True)
 
                         # ---- FREE MODE ----
                         elif state=="FREE_MODE":
@@ -1242,7 +1440,7 @@ async def main_async():
                         # ---- Viewport drag ----
                         slider_hot_now=any(s.is_dragging for s in sliders) or (state=="FREE_MODE" and ev_consumed)
 
-                        if state!="TUTORIAL":
+                        if state not in ("TUTORIAL","SURVEY","POSTQUIZ"):
                             if event.type==pygame.MOUSEBUTTONDOWN and event.button==1:
                                 if not slider_hot_now:
                                     all_ui=(quiz_buttons+cell_buttons+
@@ -1251,7 +1449,7 @@ async def main_async():
                                     in_hud=(event.pos[1]>=HEIGHT-(FREE_HUD if state=="FREE_MODE" else 300))
                                     if not any(b.rect.collidepoint(event.pos) for b in all_ui) and not in_hud:
                                         dragging=True; lastx,lasty=event.pos; drag_start_pos=event.pos
-                                        vp_h_now = HEIGHT - 300
+                                        vp_h_now   = HEIGHT - 300
                                         vp_centre_y = vp_h_now // 2
                                         drag_inverted=False
                                         if axes_shape and hasattr(axes_shape,'ov') and hasattr(axes_shape,'getText'):
@@ -1310,7 +1508,7 @@ async def main_async():
                                     elif mode=='WShells': target_w+=event.y*10.0
                                     elif mode=='CellHl':   opacity=max(0.0,min(1.0,opacity+event.y*0.05))
 
-                            if event.type==pygame.KEYDOWN and state not in ("SURVEY","CONSENT","TUTORIAL","INTERSTITIAL"):
+                            if event.type==pygame.KEYDOWN and state not in ("SURVEY","CONSENT","TUTORIAL","INTERSTITIAL","POSTQUIZ"):
                                 if event.key==pygame.K_SPACE: paused=not paused
                                 elif event.key==pygame.K_r:
                                     yaw=pitch=roll=0.0; dy=dr=d4=0.0
@@ -1376,39 +1574,13 @@ async def main_async():
 
                     # ---- SURVEY ----
                     elif state=="SURVEY":
-                        layout_survey()
-                        t=big_font.render("A couple of quick questions before we begin",True,(220,220,255))
-                        screen.blit(t,(WIDTH//2-t.get_width()//2,60))
-
-                        q1_lbl=font.render("How did you hear about this study?",True,(200,220,255))
-                        screen.blit(q1_lbl,(survey_source_radio.x, survey_source_radio.y-30))
-                        survey_source_radio.draw(screen,font)
-
-                        q2_lbl=font.render("How familiar are you with 4D geometry / polytopes?",True,(200,220,255))
-                        screen.blit(q2_lbl,(survey_fam_radio.x, survey_fam_radio.y-30))
-                        survey_fam_radio.draw(screen,font)
-
-                        # NEW: show redo feedback question when Redo is selected
-                        if survey_source_radio.selected == 4:
-                            redo_lbl = font.render(
-                                "How did the reading material affect you throughout the quiz?",
-                                True, (255, 220, 120))
-                            screen.blit(redo_lbl,(redo_feedback_radio.x, redo_feedback_radio.y-30))
-                            redo_feedback_radio.draw(screen, font)
-
-                        # Validation hint
-                        source_ok = survey_source_radio.selected is not None
-                        fam_ok    = survey_fam_radio.selected is not None
-                        redo_ok   = (survey_source_radio.selected != 4 or
-                                     redo_feedback_radio.selected is not None)
-                        if not (source_ok and fam_ok and redo_ok):
-                            hint_str = ("Please answer all questions to continue."
-                                        if survey_source_radio.selected == 4
-                                        else "Please answer both questions to continue.")
-                            hint=small_font.render(hint_str, True,(255,180,80))
-                            screen.blit(hint,(WIDTH//2-hint.get_width()//2,
-                                             btn_survey_next.rect.y-28))
-                        btn_survey_next.draw(screen,font)
+                        survey_scroll = render_survey(
+                            screen, font, big_font, small_font,
+                            WIDTH, HEIGHT,
+                            survey_source_radio, survey_fam_radio,
+                            redo_feedback_radio, btn_survey_next,
+                            survey_scroll, SURVEY_SOURCES,
+                        )
 
                     # ---- TUTORIAL ----
                     elif state=="TUTORIAL":
@@ -1554,6 +1726,11 @@ async def main_async():
                                      "SCROLL: 4D Speed","SCROLL (Paused): Angle",
                                      f"CTRL+SCROLL: {ctrl_str}","R: Reset"]:
                             screen.blit(font.render(line,True,(200,255,200)),(20,cy2)); cy2+=25
+
+                    # ---- POST-QUIZ FEEDBACK ----
+                    elif state=="POSTQUIZ":
+                        render_postquiz(screen, font, big_font, small_font,
+                                        WIDTH, HEIGHT, postquiz_radio, btn_postquiz_next)
 
                     # ---- FREE MODE ----
                     elif state=="FREE_MODE":
