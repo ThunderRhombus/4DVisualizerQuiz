@@ -305,6 +305,7 @@ async def submit_full_session(td: TimingData, model: str,
         "action":           "submit",
         "origin":           origin,
         "familiarity":      str(familiarity),
+        "is_redo":          "true" if (td. redo_feedback or td.tutoanatime < 0) else "false",
         "redo_feedback":    td.redo_feedback,
         "tuto_result":      td.tuto_result,
         "pretime":          str(td.pretime),
@@ -928,19 +929,15 @@ async def main_async():
             "1 - Never heard of it", "2 - Heard of it", "3 - Some reading",
             "4 - Comfortable", "5 - Expert",
         ]
-        REDO_FEEDBACK_OPTS = [
-            "Helped significantly",
-            "Helped somewhat",
-            "Didn't help",
-            "Confused me further",
+
+        FEEDBACK_OPTS = [
+             "Helped significantly",
+             "Helped somewhat",
+             "Didn't help",
+             "Confused me further",
         ]
-        POSTQUIZ_FEEDBACK_OPTS = [
-            "Very clear and intuitive",
-            "Mostly clear",
-            "Neutral / unsure",
-            "Somewhat confusing",
-            "Very confusing",
-        ]
+        REDO_FEEDBACK_OPTS = FEEDBACK_OPTS
+        POSTQUIZ_FEEDBACK_OPTS = FEEDBACK_OPTS
 
         survey_source_radio   = RadioGroup(SURVEY_SOURCES,         0, 0, w=300, h=36, gap=6)
         survey_fam_radio      = RadioGroup(SURVEY_FAMILIARITY_OPTS, 0, 0, w=300, h=36, gap=6)
