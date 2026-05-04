@@ -287,11 +287,12 @@ async def _get_request(url: str) -> str | None:
         return None
 
 
-async def _fetch_balancing_text():
+async def _fetch_balancing_text(is_redo=False):
     if not _is_valid_script_url(APPS_SCRIPT_URL):
         return None
     stamp = str(int(time.time() * 1000))
-    url   = f"{APPS_SCRIPT_URL}?action=assign&_={stamp}"
+    redo_param = "&is_redo=true" if is_redo else ""
+    url   = f"{APPS_SCRIPT_URL}?action=assign{redo_param}&_={stamp}"
     return await _get_request(url)
 
 
@@ -811,7 +812,7 @@ async def main_async():
         async def fetch_balancing_counts():
             nonlocal assigned_mode, mode
             try:
-                text = await _fetch_balancing_text()
+                text = await _fetch_balancing_text(is_redo)
                 if not text:
                     pool = (["Wireframe","CellHl"] if is_redo
                             else ["Wireframe","WShells","CellHl"])
