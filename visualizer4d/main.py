@@ -175,7 +175,7 @@ class TimingData:
         self.tutoanstime     = 0.0
         self.tuto_result     = ""
         self.redo_feedback   = ""    # pre-quiz redo feedback (survey)
-        self.postquiz_feedback = ""  # post-quiz experience feedback
+        self.postquiz_reading_feedback = ""  # post-quiz experience feedback
         self.postquiz_model_feedback = "" # post-quiz visualisation/model feedback
         self.anatime         = [0.0] * TOTAL_QUIZ_QUESTIONS
         self.anstime         = [0.0] * TOTAL_QUIZ_QUESTIONS
