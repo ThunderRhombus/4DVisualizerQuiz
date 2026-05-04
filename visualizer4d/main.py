@@ -12,9 +12,6 @@ import time
 import math
 import os
 
-# pygbag seeds random with a fixed value at startup, so we re-seed from OS
-# entropy immediately.  time.time_ns() gives nanosecond precision which is
-# different every run even if the wall clock looks the same.
 random.seed(os.urandom(16))
 
 print("STARTING MAIN.PY", flush=True)
@@ -114,8 +111,6 @@ def get_tutorial_angles(M_deg,Sp_deg,Sr_deg):
     return math.degrees(y_rad),math.degrees(p_rad),math.degrees(r_rad)
 
 
-
-
 TOTAL_QUIZ_QUESTIONS = 15
 
 def log_debug(msg): print(f"[4D-DEBUG] {msg}", file=sys.stdout)
@@ -123,96 +118,30 @@ def log_error(msg):  print(f"[4D-ERROR] {msg}", file=sys.stderr)
 
 
 # ============================================================
-# Google Form
+# Apps Script URL  — single endpoint for both assign and submit
 # ============================================================
-FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfXKygh8Wsv-MU_2u0bjt1eaExFICsbKm7SO-3a4s4O26NUPA/formResponse"
-
-ENTRY_ORIGIN      = "entry.1314273606"
-ENTRY_FAMILIARITY = "entry.441154203"
-ENTRY_TUTO        = "entry.1880574806"
-ENTRY_PRETIME     = "entry.645659725"
-ENTRY_TUTOANATIME = "entry.1614115597"
-ENTRY_TUTOANSTIME = "entry.1784483735"
-ENTRY_MODEL       = "entry.668887448"
-
-ENTRY_ANATIME = [
-    "entry.355370598",  "entry.476768110",  "entry.626000791",  "entry.955976263",
-    "entry.232825616",  "entry.2115909041", "entry.677281729",  "entry.1633786226",
-    "entry.1335142925", "entry.1613074632", "entry.388610013",  "entry.158821835",
-    "entry.77988818",   "entry.2061064430", "entry.1156148626",
-]
-ENTRY_ANSTIME = [
-    "entry.768698020",  "entry.393448772",  "entry.1028203807", "entry.249457686",
-    "entry.30999603",   "entry.2056975355", "entry.1462704473", "entry.1249863795",
-    "entry.2029445584", "entry.1814780546", "entry.1528808670", "entry.29993410",
-    "entry.1111111733", "entry.275793044",  "entry.1090488432",
-]
-ENTRY_READTIME= ["entry.1667660146", "entry.1444308924"]
-ENTRY_OPTIONS = [
-    "entry.1410714464", "entry.686195860",  "entry.1903582081", "entry.804227748",
-    "entry.1552357830", "entry.985403343",  "entry.586354369",  "entry.1800343372",
-    "entry.1753755800", "entry.1592964331", "entry.1488540948", "entry.1052334710",
-    "entry.1647047385", "entry.1357756722", "entry.946570160",
-]
-ENTRY_ACC     = [
-    "entry.1123870241", "entry.876441989",  "entry.107444736",  "entry.867773105",
-    "entry.880663388",  "entry.167226558",  "entry.1839444534", "entry.1574794871",
-    "entry.1105045680", "entry.1390440842", "entry.1808678547", "entry.20416211",
-    "entry.2026122329", "entry.1113584818", "entry.764061028",
-]
-ENTRY_CHOICE  = [
-    "entry.950980923",  "entry.2027806122", "entry.1679651366", "entry.639514842",
-    "entry.1653941747", "entry.1251829575", "entry.1633190029", "entry.1044139991",
-    "entry.1014351439", "entry.1714729522", "entry.1678345719", "entry.1045166073",
-    "entry.279914678",  "entry.175768213",  "entry.2018112989",
-]
-
-# ============================================================
-# Google Apps Script URL for balancing counts
-# ============================================================
-BALANCING_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxn36iA-c-LsH8PXuRkAFV8-igNRG2XxAekVFVSSZxNkGSkDsjDQfpGg9_VB8ApdU9vNA/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxn36iA-c-LsH8PXuRkAFV8-igNRG2XxAekVFVSSZxNkGSkDsjDQfpGg9_VB8ApdU9vNA/exec"
 
 
-def _is_valid_balancing_url(url):
+def _is_valid_script_url(url):
     return (
-        isinstance(url, str)
-        and url
-        and url != "REPLACE_WITH_YOUR_APPS_SCRIPT_EXEC_URL"
+        isinstance(url, str) and url
         and "/macros/s/" in url
         and url.endswith("/exec")
     )
 
 
 def _parse_balancing_mode(text):
-    """
-    Accepts either:
-        label,label,W_count,S_count,C_count
-    or:
-        W_count,S_count,C_count
-
-    The JSONP callback delivers the value via JSON.stringify on the JS side,
-    so the string Python receives may be wrapped in surrounding double-quotes
-    (e.g. '"counts,counts,0,1,1"').  Strip those before splitting.
-
-    Returns: mode with the lowest count.
-    """
-    # Strip whitespace then any surrounding JS-string quotes added by JSON.stringify
     line = text.strip().strip('"\'').splitlines()[0].strip().strip('"\'')
     parts = [p.strip().strip('"\'') for p in line.split(",")]
     log_debug(f"Balancing CSV parts: {parts}")
-
     if len(parts) >= 5:
         w_cnt, s_cnt, c_cnt = int(parts[2]), int(parts[3]), int(parts[4])
     elif len(parts) >= 3:
         w_cnt, s_cnt, c_cnt = int(parts[0]), int(parts[1]), int(parts[2])
     else:
         raise ValueError(f"Expected 3 or 5+ CSV fields, got {len(parts)}: {parts}")
-
-    counts = sorted([
-        (w_cnt, "Wireframe"),
-        (s_cnt, "WShells"),
-        (c_cnt, "CellHl"),
-    ])
+    counts = sorted([(w_cnt,"Wireframe"),(s_cnt,"WShells"),(c_cnt,"CellHl")])
     chosen = counts[0][1]
     log_debug(f"Balancing success: W={w_cnt}, S={s_cnt}, C={c_cnt} -> {chosen}")
     return chosen
@@ -228,6 +157,7 @@ class TimingData:
         self.tutoanatime   = 0.0
         self.tutoanstime   = 0.0
         self.tuto_result   = ""
+        self.redo_feedback = ""          # NEW: populated for Redo participants
         self.anatime       = [0.0] * TOTAL_QUIZ_QUESTIONS
         self.anstime       = [0.0] * TOTAL_QUIZ_QUESTIONS
         self.readtime      = [0.0, 0.0]
@@ -273,169 +203,120 @@ class TimingData:
             if ri < len(self.readtime):
                 self.readtime[ri] = round(time.time() - self._read_start, 2)
 
-    def record_answer(self, qi, chosen_label, is_correct, is_idk, shape_name="", a4_variants=None, correct_idx=None):
-        if a4_variants:
-            variants_str = "|".join(
-                f"O{i}:({v[0]:.3f},{v[1]:.3f},{v[2]:.3f})" for i, v in enumerate(a4_variants[1:], 1)
-            )
-            correct_str = f"|correct=O{correct_idx}" if correct_idx is not None else ""
-            self.options[qi] = f"{shape_name}|{variants_str}{correct_str}"
+    def record_answer(self, qi, chosen_label, is_correct, is_idk,
+                      shape_name="", chosen_a4=None, correct_a4=None, correct_idx=None):
+        """
+        options encoding:
+          if correct:  "<shape>|correct:(<x>,<y>,<z>)|picked=O<n>"
+          if idk:      "<shape>|correct:(<x>,<y>,<z>)|picked=IDK"
+          if wrong:    "<shape>|correct:(<x>,<y>,<z>)|wrong_a4:(<x>,<y>,<z>)|picked=O<n>"
+        """
+        def fmt3(t):
+            if t is None: return "none"
+            return f"({t[0]:.3f},{t[1]:.3f},{t[2]:.3f})"
+
+        correct_str = f"correct:{fmt3(correct_a4)}"
+
+        if is_idk:
+            self.options[qi] = f"{shape_name}|{correct_str}|picked=IDK"
+            self.choice[qi]  = chosen_label
+            self.acc[qi]     = "Didn't know"
+        elif is_correct:
+            self.options[qi] = f"{shape_name}|{correct_str}|picked=O{correct_idx}"
+            self.choice[qi]  = chosen_label
+            self.acc[qi]     = "Correct"
         else:
-            self.options[qi] = shape_name
-        self.choice[qi]  = chosen_label
-        if is_idk:         self.acc[qi] = "Didn't know"
-        elif is_correct:   self.acc[qi] = "Correct"
-        else:              self.acc[qi] = "Wrong"
+            wrong_str = f"wrong_a4:{fmt3(chosen_a4)}"
+            self.options[qi] = f"{shape_name}|{correct_str}|{wrong_str}|picked=O{correct_idx if is_correct else chosen_label}"
+            self.choice[qi]  = chosen_label
+            self.acc[qi]     = "Wrong"
 
 
 # ============================================================
 # Network helpers
 # ============================================================
 
-async def _post_form(data: dict):
+async def _get_request(url: str) -> str | None:
     """
-    Submit directly to Google Forms.
-
-    Browser/pygbag:
-        Hidden iframe + real form fields. Each key must be an entry.* field.
-    Desktop:
-        urllib POST to Google Forms.
+    Fire a GET request and return the response body as a string.
+    Works in both emscripten (JS fetch) and desktop (urllib).
+    Returns None on failure.
     """
     try:
-        if sys.platform == "emscripten":
-            from js import document, window
-
-            iframe_id = "gform_hidden_iframe"
-            iframe = document.getElementById(iframe_id)
-            if iframe is None:
-                iframe = document.createElement("iframe")
-                iframe.name = iframe_id
-                iframe.id = iframe_id
-                iframe.style.display = "none"
-                document.body.appendChild(iframe)
-
-            form = document.createElement("form")
-            form.method = "POST"
-            form.action = FORM_URL
-            form.target = iframe_id
-            form.style.display = "none"
-
-            for key, value in data.items():
-                inp = document.createElement("input")
-                inp.type = "hidden"
-                inp.name = str(key)
-                inp.value = str(value)
-                form.appendChild(inp)
-
-            document.body.appendChild(form)
-            form.submit()
-            window.setTimeout(lambda: form.remove(), 3000)
-            log_debug(f"Google Form submitted via hidden iframe with {len(data)} fields.")
-            return
-
-        import urllib.request, threading
-        body = urllib.parse.urlencode(data).encode("utf-8")
-        req = urllib.request.Request(
-            FORM_URL,
-            data=body,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-
-        def _send():
-            try:
-                urllib.request.urlopen(req, timeout=5)
-                log_debug(f"Google Form submitted via urllib with {len(data)} fields.")
-            except Exception as e:
-                log_error(f"Form submit error desktop: {e}")
-
-        threading.Thread(target=_send, daemon=True).start()
-
-    except Exception as e:
-        log_error(f"Failed to submit form: {e}")
-        traceback.print_exc()
-
-
-async def _fetch_balancing_text():
-    if not _is_valid_balancing_url(BALANCING_SCRIPT_URL):
-        log_debug("Balancing URL invalid; using random fallback.")
-        return None
-
-    try:
-        stamp = str(int(time.time() * 1000))
-        sep = "&" if "?" in BALANCING_SCRIPT_URL else "?"
-        url = BALANCING_SCRIPT_URL + sep + "action=assign&_=" + stamp
-
         if sys.platform == "emscripten":
             from js import window
-
-            result_key = "__balance_result_" + stamp
-
-            # Use JS fetch() — reliable in pygbag, unlike JSONP polling.
-            # Apps Script redirects GET requests, so we need redirect:'follow'.
-            # Result is stored in a global so Python can poll for it.
+            stamp = str(int(time.time() * 1000))
+            result_key = f"__gas_result_{stamp}"
             window.eval(f"""
                 window["{result_key}"] = "";
                 fetch("{url}", {{redirect: "follow"}})
                     .then(function(r) {{ return r.text(); }})
                     .then(function(t) {{ window["{result_key}"] = t || "__EMPTY__"; }})
-                    .catch(function(e) {{ window["{result_key}"] = "__FETCH_ERROR__"; }});
+                    .catch(function(e) {{ window["{result_key}"] = "__FETCH_ERROR__:" + e; }});
             """)
-
-            for _ in range(80):  # up to 8 seconds
+            for _ in range(100):   # up to 10 s
                 raw = str(window.eval(f'window["{result_key}"] || ""'))
                 if raw:
-                    log_debug(f"Balancing fetch result: {raw[:200]}")
-                    if raw in ("__FETCH_ERROR__", "__EMPTY__"):
+                    log_debug(f"GET result ({url[:60]}): {raw[:120]}")
+                    if raw.startswith("__FETCH_ERROR__") or raw == "__EMPTY__":
                         return None
                     return raw
                 await asyncio.sleep(0.1)
-
-            log_debug("Balancing fetch timed out.")
+            log_debug("GET timed out")
             return None
 
         import urllib.request
-        with urllib.request.urlopen(url, timeout=5) as r:
-            text = r.read().decode("utf-8")
-
-        log_debug(f"Balancing GET body desktop: {text[:200]}")
-        return text
+        with urllib.request.urlopen(url, timeout=8) as r:
+            return r.read().decode("utf-8")
 
     except Exception as e:
-        log_debug(f"Balancing GET failed: {e}")
+        log_debug(f"GET failed: {e}")
         traceback.print_exc()
         return None
 
 
-
-async def submit_survey(td: TimingData, origin: str, familiarity: int):
-    """Early partial submission right after the survey screen."""
-    await _post_form({
-        ENTRY_ORIGIN:      origin,
-        ENTRY_FAMILIARITY: str(familiarity),
-        ENTRY_PRETIME:     str(td.pretime),
-    })
+async def _fetch_balancing_text():
+    if not _is_valid_script_url(APPS_SCRIPT_URL):
+        return None
+    stamp = str(int(time.time() * 1000))
+    url   = f"{APPS_SCRIPT_URL}?action=assign&_={stamp}"
+    return await _get_request(url)
 
 
 async def submit_full_session(td: TimingData, model: str,
                                origin: str, familiarity: int):
-    data = {
-        ENTRY_ORIGIN:      origin,
-        ENTRY_FAMILIARITY: str(familiarity),
-        ENTRY_TUTO:        td.tuto_result,
-        ENTRY_PRETIME:     str(td.pretime),
-        ENTRY_TUTOANATIME: str(td.tutoanatime),
-        ENTRY_TUTOANSTIME: str(td.tutoanstime),
-        ENTRY_MODEL:       model,
+    """Build a GET URL with all session data and fire it at the Apps Script."""
+    if not _is_valid_script_url(APPS_SCRIPT_URL):
+        log_error("submit_full_session: invalid Apps Script URL")
+        return
+
+    params = {
+        "action":        "submit",
+        "origin":        origin,
+        "familiarity":   str(familiarity),
+        "redo_feedback": td.redo_feedback,
+        "tuto_result":   td.tuto_result,
+        "pretime":       str(td.pretime),
+        "tutoanatime":   str(td.tutoanatime),
+        "tutoanstime":   str(td.tutoanstime),
+        "model":         model,
     }
     for i in range(TOTAL_QUIZ_QUESTIONS):
-        data[ENTRY_ANATIME[i]] = str(td.anatime[i])
-        data[ENTRY_ANSTIME[i]] = str(td.anstime[i])
-        data[ENTRY_OPTIONS[i]] = td.options[i]
-        data[ENTRY_ACC[i]]     = td.acc[i]
-        data[ENTRY_CHOICE[i]]  = td.choice[i]
-    for i in range(len(td.readtime)):
-        data[ENTRY_READTIME[i]] = str(td.readtime[i])
-    await _post_form(data)
+        params[f"anatime_{i+1}"]  = str(td.anatime[i])
+        params[f"anstime_{i+1}"]  = str(td.anstime[i])
+        params[f"options_{i+1}"]  = td.options[i]
+        params[f"acc_{i+1}"]      = td.acc[i]
+        params[f"choice_{i+1}"]   = td.choice[i]
+    params["readtime_1"] = str(td.readtime[0])
+    params["readtime_2"] = str(td.readtime[1])
+
+    url = APPS_SCRIPT_URL + "?" + urllib.parse.urlencode(params)
+    log_debug(f"Submitting session, URL length = {len(url)}")
+    result = await _get_request(url)
+    if result and result.strip() == "ok":
+        log_debug("Session submitted successfully")
+    else:
+        log_error(f"Session submission unexpected response: {result}")
 
 
 # ============================================================
@@ -470,6 +351,7 @@ class TutorialOriginRenderer(OriginRenderer):
                 pygame.draw.circle(surface, (r_c, g_c, b_c), (sx, sy), 6)
                 text_surf = self.font.render(text, True, (200, 200, 200))
                 surface.blit(text_surf, (sx-3, sy-6))
+
 
 # ============================================================
 # Draggable Slider
@@ -625,10 +507,9 @@ class RadioGroup:
 
 
 # ============================================================
-# Interstitial text renderer — handles long wrapped paragraphs with scrolling
+# Interstitial text renderer
 # ============================================================
 def _wrap_text(text, font, max_width):
-    """Word-wrap a single line of text to fit within max_width pixels."""
     words = text.split()
     lines = []
     current = []
@@ -647,17 +528,11 @@ def _wrap_text(text, font, max_width):
 
 def render_interstitial_text(screen, text, font, big_font, small_font,
                               WIDTH, HEIGHT, btn_continue, scroll_offset=0):
-    """
-    Render the interstitial screen with scrolling support.
-    The Continue button is always pinned at the bottom of the screen.
-    A scrollbar and hint appear when content overflows.
-    Returns max_scroll so the caller can clamp scroll_offset.
-    """
     MAX_W = min(WIDTH - 120, 860)
     COL_X = WIDTH // 2 - MAX_W // 2
     TOP_PAD = 40
-    BTN_H   = btn_continue.rect.height + 32   # reserved strip at bottom for button
-    VIEWPORT_H = HEIGHT - BTN_H               # scrollable viewport height
+    BTN_H   = btn_continue.rect.height + 32
+    VIEWPORT_H = HEIGHT - BTN_H
 
     LINE_H_BIG   = big_font.get_height() + 4
     LINE_H_BODY  = font.get_height() + 3
@@ -680,7 +555,6 @@ def render_interstitial_text(screen, text, font, big_font, small_font,
             surf = f.render(line, True, col)
             rendered_lines.append((surf, use_big, li == 0 and pi > 0))
 
-    # Measure total content height
     total_h = TOP_PAD
     for entry in rendered_lines:
         if entry is None:
@@ -690,9 +564,8 @@ def render_interstitial_text(screen, text, font, big_font, small_font,
             if new_para:
                 total_h += PARA_GAP // 2
             total_h += LINE_H_BIG if use_big else LINE_H_BODY
-    total_h += 20  # bottom padding
+    total_h += 20
 
-    # Build an off-screen surface for the full content
     content_surf = pygame.Surface((WIDTH, max(total_h, VIEWPORT_H)))
     content_surf.fill((5, 5, 5))
 
@@ -708,20 +581,14 @@ def render_interstitial_text(screen, text, font, big_font, small_font,
         content_surf.blit(surf, (COL_X + MAX_W // 2 - surf.get_width() // 2, y))
         y += lh
 
-    # Clamp scroll_offset
     max_scroll = max(0, total_h - VIEWPORT_H)
     scroll_offset = max(0, min(scroll_offset, max_scroll))
 
-    # Blit the visible viewport slice onto the screen
     screen.blit(content_surf, (0, 0), (0, scroll_offset, WIDTH, VIEWPORT_H))
 
-
-    # Continue button — always pinned to the bottom strip
     btn_continue.rect.topleft = (WIDTH // 2 - btn_continue.rect.width // 2, HEIGHT - BTN_H + 8)
     btn_continue.draw(screen, font)
 
-
-    # Draw scrollbar when content overflows
     if max_scroll > 0:
         track_h = VIEWPORT_H - 20
         thumb_h = max(30, int(track_h * VIEWPORT_H / total_h))
@@ -729,17 +596,15 @@ def render_interstitial_text(screen, text, font, big_font, small_font,
         pygame.draw.rect(screen, (60, 60, 80),   (WIDTH - 12, 10, 6, track_h), border_radius=3)
         pygame.draw.rect(screen, (140, 160, 220), (WIDTH - 12, thumb_y, 6, thumb_h), border_radius=3)
 
-        # "scroll for more" hint when not yet at the bottom
         if scroll_offset < max_scroll - 10:
             hint = small_font.render("scroll for more", True, (200, 200, 100))
-            # Draw a subtle background strip so hint is readable over any text
             hint_rect = hint.get_rect(centerx=WIDTH // 2, y=VIEWPORT_H - hint.get_height() + 50)
             bg_rect = hint_rect.inflate(20, 6)
             bg_surf = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
             bg_surf.fill((5, 5, 5, 180))
             screen.blit(bg_surf, bg_rect.topleft)
             screen.blit(hint, hint_rect)
-    return max_scroll  # caller uses this to clamp its stored scroll_offset
+    return max_scroll
 
 
 # ============================================================
@@ -764,28 +629,18 @@ async def main_async():
         # ------------------------------------------------------------------
         # Session
         # ------------------------------------------------------------------
-        user_id = None  # removed - not used
         assigned_mode = "CellHl"
         mode = assigned_mode
 
         async def fetch_balancing_counts():
-            """
-            Try to assign the least-used mode from Apps Script.
-            If anything fails, fall back to random so the game always starts.
-            """
             nonlocal assigned_mode, mode
             try:
-                print("[4D-BALANCE] starting balancing fetch", flush=True)
                 text = await _fetch_balancing_text()
-
                 if not text:
                     assigned_mode = mode = random.choice(["Wireframe", "WShells", "CellHl"])
                     log_debug(f"Balancing unavailable; random fallback -> {mode}")
                     return
-
                 assigned_mode = mode = _parse_balancing_mode(text)
-                print(f"[4D-BALANCE] balancing text returned: {text}", flush=True)
-
             except Exception as e:
                 log_debug(f"Balancing failed: {e}")
                 traceback.print_exc()
@@ -793,10 +648,8 @@ async def main_async():
 
         balancing_task = asyncio.create_task(fetch_balancing_counts())
 
-
-
         interstitial_text   = None
-        interstitial_scroll = 0          # ← NEW: tracks scroll position for interstitials
+        interstitial_scroll = 0
         state               = "CONSENT"
 
         td = TimingData()
@@ -805,6 +658,7 @@ async def main_async():
         survey_familiarity_val = 1
         survey_source          = None
         survey_familiarity     = None
+        is_redo                = False   # NEW
 
         tutorial_sub           = "WATCH"
         tutorial_angle         = 0.0
@@ -876,7 +730,6 @@ async def main_async():
         FREE_HUD = 170
         SLIDER_W = 160
 
-        # --- Free mode sliders: default XW=0.5, YW=0.0, ZW=0.0 ---
         sliders = [
             Slider(0,0,SLIDER_W,"XW",-1.0,1.0,0.5),
             Slider(0,0,SLIDER_W,"YW",-1.0,1.0,0.0),
@@ -884,12 +737,27 @@ async def main_async():
         ]
         def slider_a4(): return tuple(s.value for s in sliders)
 
-        SURVEY_SOURCES     = ["School","Blog or article","Friend / Referral","Other"]
-        SURVEY_FAMILIARITY_OPTS = ["1 - Never heard of it","2 - Heard of it","3 - Some reading",
-                                   "4 - Comfortable","5 - Expert"]
-        survey_source_radio = RadioGroup(SURVEY_SOURCES,        0,0,w=300,h=42,gap=8)
-        survey_fam_radio    = RadioGroup(SURVEY_FAMILIARITY_OPTS,0,0,w=300,h=42,gap=8)
-        btn_survey_next     = ToggleButton(0,0,200,44,"Continue ->",(80,160,80))
+        # ------------------------------------------------------------------
+        # Survey widgets
+        # ------------------------------------------------------------------
+        # NEW: "Redo" added as 5th source option
+        SURVEY_SOURCES = ["School", "Blog or article", "Friend / Referral", "Other", "Redo"]
+        SURVEY_FAMILIARITY_OPTS = [
+            "1 - Never heard of it", "2 - Heard of it", "3 - Some reading",
+            "4 - Comfortable", "5 - Expert",
+        ]
+        # NEW: redo feedback options
+        REDO_FEEDBACK_OPTS = [
+            "Helped significantly",
+            "Helped somewhat",
+            "Didn't help",
+            "Confused me further",
+        ]
+
+        survey_source_radio   = RadioGroup(SURVEY_SOURCES,        0, 0, w=300, h=42, gap=8)
+        survey_fam_radio      = RadioGroup(SURVEY_FAMILIARITY_OPTS,0, 0, w=300, h=42, gap=8)
+        redo_feedback_radio   = RadioGroup(REDO_FEEDBACK_OPTS,     0, 0, w=300, h=42, gap=8)  # NEW
+        btn_survey_next       = ToggleButton(0, 0, 200, 44, "Continue ->", (80,160,80))
 
         btn_yes = ToggleButton(0,0,280,52,"Yes - I consent to participate",(70,170,70))
         btn_no  = ToggleButton(0,0,280,52,"No - take me to free exploration",(170,70,70))
@@ -913,7 +781,6 @@ async def main_async():
             ToggleButton(0,0,108,28,"WShells", (80,180,120)),
             ToggleButton(0,0,108,28,"CellHl",   (180,120,80)),
         ]
-        # "Set to 0" button for sliders
         btn_sliders_zero = ToggleButton(0,0,80,24,"Set to 0",(100,100,160))
 
         shape_dropdown    = Dropdown(0,0,160,28,SHAPE_NAMES,SHAPE_COLS)
@@ -926,11 +793,29 @@ async def main_async():
         # Layout helpers
         # ------------------------------------------------------------------
         def layout_survey():
-            col_x=WIDTH//2-150; q1_y=180
-            survey_source_radio.x=col_x; survey_source_radio.y=q1_y
-            q2_y=q1_y+survey_source_radio.total_height()+60
-            survey_fam_radio.x=col_x; survey_fam_radio.y=q2_y
-            btn_survey_next.rect.topleft=(WIDTH//2-100, q2_y+survey_fam_radio.total_height()+30)
+            col_x = WIDTH // 2 - 150
+            q1_y  = 160
+            survey_source_radio.x = col_x
+            survey_source_radio.y = q1_y
+
+            q2_y = q1_y + survey_source_radio.total_height() + 50
+            survey_fam_radio.x = col_x
+            survey_fam_radio.y = q2_y
+
+            # Redo feedback appears below familiarity when Redo is selected
+            redo_y = q2_y + survey_fam_radio.total_height() + 50
+            redo_feedback_radio.x = col_x
+            redo_feedback_radio.y = redo_y
+
+            btn_y = redo_y + (redo_feedback_radio.total_height() + 30
+                              if survey_source_radio.selected == 4   # "Redo" index
+                              else survey_fam_radio.total_height() + 30 - redo_feedback_radio.total_height())
+            # Simpler: always place continue below the lowest visible widget
+            if survey_source_radio.selected == 4:
+                btn_y = redo_y + redo_feedback_radio.total_height() + 30
+            else:
+                btn_y = q2_y + survey_fam_radio.total_height() + 30
+            btn_survey_next.rect.topleft = (WIDTH // 2 - 100, btn_y)
 
         def layout_tutorial():
             btn_tutorial_ready.rect.topleft=(WIDTH//2-100, HEIGHT-100)
@@ -976,7 +861,6 @@ async def main_async():
                 s.x = slider_x
                 s.y = hud_top + i * row_h + row_h // 2
                 s.w = min(SLIDER_W, WIDTH - slider_x - 340)
-            # "Set → 0" button sits to the right of the last slider value label
             last_s = sliders[-1]
             btn_sliders_zero.rect.x = last_s.x + last_s.w + 56
             btn_sliders_zero.rect.y = hud_top + row_h + (row_h // 2) - btn_sliders_zero.rect.height // 2
@@ -1164,18 +1048,26 @@ async def main_async():
                         elif state=="SURVEY":
                             survey_source_radio.handle_event(event)
                             survey_fam_radio.handle_event(event)
+                            # Only handle redo feedback radio when Redo is selected
+                            if survey_source_radio.selected == 4:
+                                redo_feedback_radio.handle_event(event)
                             btn_survey_next.handle_event(event)
                             if btn_survey_next.selected:
                                 btn_survey_next.selected=False
-                                if (survey_source_radio.selected is not None and
-                                        survey_fam_radio.selected is not None):
-                                    survey_origin          = SURVEY_SOURCES[survey_source_radio.selected]
-                                    survey_familiarity_val = survey_fam_radio.selected+1
+                                source_ok = survey_source_radio.selected is not None
+                                fam_ok    = survey_fam_radio.selected is not None
+                                redo_ok   = (survey_source_radio.selected != 4 or
+                                             redo_feedback_radio.selected is not None)
+                                if source_ok and fam_ok and redo_ok:
+                                    nonlocal_src = survey_source_radio.selected
+                                    survey_origin          = SURVEY_SOURCES[nonlocal_src]
+                                    survey_familiarity_val = survey_fam_radio.selected + 1
                                     survey_source          = survey_origin
                                     survey_familiarity     = survey_familiarity_val
+                                    is_redo                = (nonlocal_src == 4)
+                                    if is_redo:
+                                        td.redo_feedback = REDO_FEEDBACK_OPTS[redo_feedback_radio.selected]
                                     td.mark_survey_done()
-                                    # Submit early partial response to capture drop-outs
-                                    #asyncio.create_task(submit_survey(td, survey_origin, survey_familiarity_val))
                                     enter_tutorial()
 
                         # ---- TUTORIAL ----
@@ -1222,7 +1114,7 @@ async def main_async():
                                 if btn_tutorial_next.selected:
                                     btn_tutorial_next.selected=False
                                     state="INTERSTITIAL"; interstitial_text=None
-                                    interstitial_scroll = 0   # ← reset scroll on enter
+                                    interstitial_scroll = 0
 
                         # ---- INTERSTITIAL ----
                         elif state=="INTERSTITIAL":
@@ -1231,7 +1123,6 @@ async def main_async():
                                 btn_continue.selected=False
                                 td.end_read()
                                 setup_question()
-                            # Scroll wheel moves the text
                             if event.type == pygame.MOUSEWHEEL:
                                 interstitial_scroll = max(0, interstitial_scroll - event.y * 30)
                                 ev_consumed = True
@@ -1252,20 +1143,32 @@ async def main_async():
                                 btn.handle_event(event)
                                 if btn.selected:
                                     td.end_ans(question_index)
-                                    chosen_label=f"Option {i+1}"; is_correct=(i+1==correct_idx)
-                                    shape_name=getattr(active_shape,'__class__',type(active_shape)).__name__
-                                    td.record_answer(question_index,chosen_label,is_correct,False,shape_name,a4_variants,correct_idx)
-                                    feedback_text="CORRECT! Axis mapping matches." if is_correct else f"WRONG. Correct was Option {correct_idx}."
-                                    feedback_color=(100,255,100) if is_correct else (255,100,100)
+                                    chosen_label = f"Option {i+1}"
+                                    is_correct   = (i+1 == correct_idx)
+                                    shape_name   = type(active_shape).__name__
+                                    # Chosen a4 is the variant the participant picked
+                                    chosen_a4    = a4_variants[i+1]
+                                    td.record_answer(
+                                        question_index, chosen_label, is_correct, False,
+                                        shape_name, chosen_a4, a4_correct, correct_idx
+                                    )
+                                    feedback_text  = ("CORRECT! Axis mapping matches."
+                                                      if is_correct
+                                                      else f"WRONG. Correct was Option {correct_idx}.")
+                                    feedback_color = (100,255,100) if is_correct else (255,100,100)
                                     state="FEEDBACK"
                                     for ob in quiz_buttons+[btn_idk]: ob.selected=False
                                     btn.selected=True
                             btn_idk.handle_event(event)
                             if btn_idk.selected:
                                 td.end_ans(question_index)
-                                shape_name=getattr(active_shape,'__class__',type(active_shape)).__name__
-                                td.record_answer(question_index,"Option 6",False,True,shape_name,a4_variants,correct_idx)
-                                feedback_text=f"Correct was Option {correct_idx}."; feedback_color=(200,200,100)
+                                shape_name = type(active_shape).__name__
+                                td.record_answer(
+                                    question_index, "IDK", False, True,
+                                    shape_name, None, a4_correct, correct_idx
+                                )
+                                feedback_text  = f"Correct was Option {correct_idx}."
+                                feedback_color = (200,200,100)
                                 state="FEEDBACK"
                                 for ob in quiz_buttons: ob.selected=False
                                 btn_idk.selected=True
@@ -1281,7 +1184,7 @@ async def main_async():
                                     enter_free(from_quiz=True)
                                 elif question_index%5==0:
                                     state="INTERSTITIAL"; interstitial_text=None
-                                    interstitial_scroll = 0   # ← reset scroll on enter
+                                    interstitial_scroll = 0
                                     ri=question_index//5-1
                                     if ri<len(td.readtime): td.start_read(ri)
                                 else:
@@ -1290,7 +1193,6 @@ async def main_async():
                         # ---- FREE MODE ----
                         elif state=="FREE_MODE":
                             ev_consumed=any(s.handle_event(event) for s in sliders)
-                            # "Set → 0" button
                             if not ev_consumed:
                                 btn_sliders_zero.handle_event(event)
                                 if btn_sliders_zero.selected:
@@ -1455,7 +1357,6 @@ async def main_async():
                         layout_consent()
                         t=huge_font.render("4D Axis Quiz Platform",True,(220,220,255))
                         screen.blit(t,(WIDTH//2-t.get_width()//2,40))
-
                         lines=[
                             "This study investigates how people perceive 4-dimensional rotations",
                             "through different visual representations.",
@@ -1478,28 +1379,46 @@ async def main_async():
                         layout_survey()
                         t=big_font.render("A couple of quick questions before we begin",True,(220,220,255))
                         screen.blit(t,(WIDTH//2-t.get_width()//2,60))
+
                         q1_lbl=font.render("How did you hear about this study?",True,(200,220,255))
-                        screen.blit(q1_lbl,(survey_source_radio.x,survey_source_radio.y-30))
+                        screen.blit(q1_lbl,(survey_source_radio.x, survey_source_radio.y-30))
                         survey_source_radio.draw(screen,font)
+
                         q2_lbl=font.render("How familiar are you with 4D geometry / polytopes?",True,(200,220,255))
-                        screen.blit(q2_lbl,(survey_fam_radio.x,survey_fam_radio.y-30))
+                        screen.blit(q2_lbl,(survey_fam_radio.x, survey_fam_radio.y-30))
                         survey_fam_radio.draw(screen,font)
-                        needs_both=(survey_source_radio.selected is None or survey_fam_radio.selected is None)
-                        if needs_both:
-                            hint=small_font.render("Please answer both questions to continue.",True,(255,180,80))
-                            screen.blit(hint,(WIDTH//2-hint.get_width()//2,btn_survey_next.rect.y-28))
+
+                        # NEW: show redo feedback question when Redo is selected
+                        if survey_source_radio.selected == 4:
+                            redo_lbl = font.render(
+                                "How did the reading material affect you throughout the quiz?",
+                                True, (255, 220, 120))
+                            screen.blit(redo_lbl,(redo_feedback_radio.x, redo_feedback_radio.y-30))
+                            redo_feedback_radio.draw(screen, font)
+
+                        # Validation hint
+                        source_ok = survey_source_radio.selected is not None
+                        fam_ok    = survey_fam_radio.selected is not None
+                        redo_ok   = (survey_source_radio.selected != 4 or
+                                     redo_feedback_radio.selected is not None)
+                        if not (source_ok and fam_ok and redo_ok):
+                            hint_str = ("Please answer all questions to continue."
+                                        if survey_source_radio.selected == 4
+                                        else "Please answer both questions to continue.")
+                            hint=small_font.render(hint_str, True,(255,180,80))
+                            screen.blit(hint,(WIDTH//2-hint.get_width()//2,
+                                             btn_survey_next.rect.y-28))
                         btn_survey_next.draw(screen,font)
 
                     # ---- TUTORIAL ----
                     elif state=="TUTORIAL":
                         layout_tutorial()
-
-                        y,p,r=get_tutorial_angles(tutorial_mouse_yaw,tutorial_angle,0)
+                        y2,p2,r2=get_tutorial_angles(tutorial_mouse_yaw,tutorial_angle,0)
 
                         if tutorial_sub=="WATCH":
                             vp_w=WIDTH; vp_h=HEIGHT-300
                             vp=pygame.Surface((vp_w,max(1,vp_h))); vp.fill((0,0,0))
-                            tutorial_cube.rotate(y,p,r,0,0,0)
+                            tutorial_cube.rotate(y2,p2,r2,0,0,0)
                             renderers['Tutorial'].render(vp,tutorial_shapes)
                             ay,ap,ar=get_tutorial_angles(tutorial_mouse_yaw,0,0)
                             osurf=pygame.Surface((180,180)); osurf.set_colorkey((15,15,15))
@@ -1524,8 +1443,9 @@ async def main_async():
                             screen.fill((5,5,5))
                             title=big_font.render("Which indicator matches the rotation you just saw?",True,(255,220,80))
                             screen.blit(title,(WIDTH//2-title.get_width()//2,14))
-                            sub=small_font.render("The cube was spinning so that X swept into Z — find the indicator showing that.",
-                                                  True,(180,180,200))
+                            sub=small_font.render(
+                                "The cube was spinning so that X swept into Z — find the indicator showing that.",
+                                True,(180,180,200))
                             screen.blit(sub,(WIDTH//2-sub.get_width()//2,55))
                             ORIG_SIZE=180; gap=50
                             total_ind_w=3*ORIG_SIZE+2*gap; ox_start=WIDTH//2-total_ind_w//2; oy_base=80
@@ -1546,12 +1466,20 @@ async def main_async():
                                 for b in tutorial_btns: b.draw(screen,font)
                             else:
                                 correct=(tutorial_answer==TUTORIAL_CORRECT)
-                                if correct:       fb="Correct! X sweeps into Z — Option 1 shows the X axis moving."; fb_col=(100,255,120)
-                                elif tutorial_answer=="idk": fb="The answer is Option 1: X sweeps into Z, so the X indicator moves."; fb_col=(200,200,100)
-                                else:             fb="Not quite — Option 1 is correct: the X axis sweeps into Z."; fb_col=(255,120,100)
+                                if correct:
+                                    fb="Correct! X sweeps into Z — Option 1 shows the X axis moving."
+                                    fb_col=(100,255,120)
+                                elif tutorial_answer=="idk":
+                                    fb="The answer is Option 1: X sweeps into Z, so the X indicator moves."
+                                    fb_col=(200,200,100)
+                                else:
+                                    fb="Not quite — Option 1 is correct: the X axis sweeps into Z."
+                                    fb_col=(255,120,100)
                                 fs=font.render(fb,True,fb_col)
                                 screen.blit(fs,(WIDTH//2-fs.get_width()//2,HEIGHT-165))
-                                exp=small_font.render("In the real quiz the 4D shape spins — pick the indicator whose axis motion matches.",True,(180,180,200))
+                                exp=small_font.render(
+                                    "In the real quiz the 4D shape spins — pick the indicator whose axis motion matches.",
+                                    True,(180,180,200))
                                 screen.blit(exp,(WIDTH//2-exp.get_width()//2,HEIGHT-145))
                                 for i,b in enumerate(tutorial_btns):
                                     b.draw(screen,font)
