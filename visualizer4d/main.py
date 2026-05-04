@@ -1234,7 +1234,7 @@ async def main_async():
                                     if btn_redo_toggle.rect.collidepoint(adj_pos):
                                         redo_section_enabled = not redo_section_enabled
                                         btn_redo_toggle.label = (
-                                            "✓ Redo participant (click to undo)"
+                                            "Redo participant (click to undo)"
                                             if redo_section_enabled
                                             else "I am a Redo participant"
                                         )
